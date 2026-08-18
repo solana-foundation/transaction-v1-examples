@@ -1,0 +1,33 @@
+{
+    "name": "txv1-examples",
+    "version": "0.1.0",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "test": "vitest run test/wire.test.ts test/budget.test.ts",
+        "test:live": "vitest run"
+    },
+    "dependencies": {
+        "@solana-program/compute-budget": "^0.17.0",
+        "@solana-program/system": "^0.13.0",
+        "@solana/kit": "8.0.0-canary-20260819190144",
+        "@triton-one/yellowstone-grpc": "6.0.0"
+    },
+    "devDependencies": {
+        "@solana-config/oxc": "^0.1.1",
+        "@types/node": "^24.0.0",
+        "oxfmt": "^0.48.0",
+        "oxlint": "^1.63.0",
+        "oxlint-tsgolint": "^7.0.2001",
+        "tsx": "^4.20.0",
+        "typescript": "^5.9.0",
+        "vitest": "^3.2.0"
+    },
+    "pnpm": {
+        "onlyBuiltDependencies": [
+            "esbuild",
+            "protobufjs"
+        ]
+    }
+}

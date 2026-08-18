@@ -1,0 +1,12 @@
+# Rust
+rust/target/
+
+# Node
+node_modules/
+ts/dist/
+*.tsbuildinfo
+
+# Local validator + geyser artifacts
+/.local/
+test-ledger/
+*.log

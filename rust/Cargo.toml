@@ -1,0 +1,46 @@
+[package]
+name = "txv1"
+edition = "2021"
+license = "MIT"
+publish = false
+version = "0.1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+
+[dependencies]
+anyhow = "1"
+bs58 = "0.5"
+clap = { version = "4", features = ["derive", "env"] }
+futures = "0.3"
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+
+# 12.6.0 is the first published version whose generated code carries
+# `Message.config` (field 7). Anything older decodes a v1 message as a v0
+# message with no compute budget and reports no error.
+yellowstone-grpc-client = "13.3.0"
+yellowstone-grpc-proto = "12.6.0"
+
+# `Address` is the canonical name for a public key; `solana-pubkey` is a facade
+# that re-exports it as `Pubkey`. The version is pinned to 2.6.x because
+# `solana-pubkey` — reached transitively through `solana-message` and the RPC
+# client — pins the same range, and two `solana-address` versions in one graph
+# would be two incompatible `Address` types.
+solana-address = { version = "~2.6.1", features = ["atomic", "copy", "decode"] }
+solana-commitment-config = "3.0.0"
+solana-feature-gate-interface = { version = "4.0.0", features = ["bincode"] }
+solana-hash = "4.3.0"
+solana-keypair = "3.0.0"
+solana-message = "4.4.1"
+solana-rpc-client = "4.2.1"
+solana-sdk-ids = "3.0.0"
+solana-rpc-client-api = "4.2.1"
+solana-signature = "3.4.1"
+solana-signer = "3.0.0"
+solana-system-interface = { version = "2.0.0", features = ["bincode"] }
+solana-transaction = "4.1.6"
+solana-transaction-status-client-types = "4.2.1"

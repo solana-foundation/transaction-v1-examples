@@ -1,0 +1,146 @@
+/**
+ * Tests that run against a live validator.
+ *
+ * Skipped unless `TXV1_LIVE=1`, which `just test-live` sets after starting a
+ * 4.2.1 validator with the Yellowstone geyser plugin.
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import { computeBudgetOfMessage } from '../src/lib/budget';
+import {
+    ALL_TRANSACTIONS_REQUEST,
+    DEFAULT_GRPC_ENDPOINT,
+    type GrpcMessage,
+    messageVersion,
+    subscribe,
+    type SubscribeUpdate,
+} from '../src/lib/grpc';
+import { BLOCK_CONFIG } from '../src/lib/rpc';
+import {
+    buildV1Transfer,
+    type Clients,
+    createClients,
+    sendAndConfirm,
+    sendV1TransferAndGetSlot,
+} from '../src/lib/send';
+import { EXAMPLE_CONFIG } from '../src/lib/v1';
+
+const live = process.env.TXV1_LIVE === '1';
+
+async function sendV1(clients: Clients) {
+    return await sendAndConfirm(clients, await buildV1Transfer(clients));
+}
+
+/**
+ * Resolves with the first v1 message the stream delivers.
+ *
+ * The rejection paths matter as much as the resolution: without them a plugin
+ * that downgrades v1 to v0 shows up as a test that hangs to the suite timeout
+ * rather than as the failure it is.
+ */
+function firstV1Message(stream: Awaited<ReturnType<typeof subscribe>>['stream']): Promise<GrpcMessage> {
+    return new Promise<GrpcMessage>((resolve, reject) => {
+        stream.on('data', (update: SubscribeUpdate) => {
+            const message = update.transaction?.transaction?.transaction?.message;
+            if (message && messageVersion(message) === 'v1') {
+                resolve(message);
+            }
+        });
+        stream.on('error', reject);
+        stream.on('end', () => reject(new Error('stream ended before a v1 transaction arrived')));
+        setTimeout(() => reject(new Error('timed out waiting for a v1 transaction')), 45_000).unref();
+    });
+}
+
+describe.skipIf(!live)('getTransaction', () => {
+    it('should report version 1 and expose the transaction config', async () => {
+        const clients = createClients();
+        const signature = await sendV1(clients);
+
+        const fetched = await clients.rpc
+            .getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+            .send();
+
+        expect(fetched?.version).toBe(1);
+        // The three `u32` fields come back as numbers and only the priority
+        // fee, a `u64`, is a bigint.
+        expect(fetched!.transaction.message.transactionConfig).toStrictEqual({
+            computeUnitLimit: EXAMPLE_CONFIG.computeUnitLimit,
+            heapSize: EXAMPLE_CONFIG.heapSize,
+            loadedAccountsDataSizeLimit: EXAMPLE_CONFIG.loadedAccountsDataSizeLimit,
+            priorityFee: EXAMPLE_CONFIG.priorityFeeLamports,
+        });
+    });
+
+    it('should reject a v1 transaction when the version ceiling is too low', async () => {
+        const clients = createClients();
+        const signature = await sendV1(clients);
+
+        await expect(
+            clients.rpc.getTransaction(signature, { commitment: 'confirmed', encoding: 'json' }).send(),
+        ).rejects.toThrow(/maxSupportedTransactionVersion/);
+        await expect(
+            clients.rpc
+                .getTransaction(signature, {
+                    commitment: 'confirmed',
+                    encoding: 'json',
+                    maxSupportedTransactionVersion: 0,
+                })
+                .send(),
+        ).rejects.toThrow(/maxSupportedTransactionVersion/);
+    });
+});
+
+describe.skipIf(!live)('getBlock', () => {
+    it('should fail entirely when the block holds a v1 transaction', async () => {
+        const clients = createClients();
+        const { slot } = await sendV1TransferAndGetSlot(clients);
+
+        // The whole block is refused, not just the v1 transaction inside it.
+        await expect(
+            clients.rpc.getBlock(slot, { ...BLOCK_CONFIG, maxSupportedTransactionVersion: 0 }).send(),
+        ).rejects.toThrow(/maxSupportedTransactionVersion/);
+
+        const block = await clients.rpc.getBlock(slot, { ...BLOCK_CONFIG, maxSupportedTransactionVersion: 1 }).send();
+        expect(block?.transactions.some(transaction => transaction.version === 1)).toBe(true);
+    });
+});
+
+describe.skipIf(!live)('the gRPC transaction stream', () => {
+    it('should deliver the v1 config intact', async () => {
+        const { close, stream } = await subscribe(DEFAULT_GRPC_ENDPOINT, ALL_TRANSACTIONS_REQUEST);
+        try {
+            const firstV1 = firstV1Message(stream);
+
+            await sendV1(createClients());
+            const message = await firstV1;
+
+            expect(message.versioned).toBe(true);
+            expect(message.config).toStrictEqual({
+                computeUnitLimit: EXAMPLE_CONFIG.computeUnitLimit,
+                heapSize: EXAMPLE_CONFIG.heapSize,
+                loadedAccountsDataSizeLimit: EXAMPLE_CONFIG.loadedAccountsDataSizeLimit,
+                priorityFee: `${EXAMPLE_CONFIG.priorityFeeLamports}`,
+            });
+            expect(message.addressTableLookups).toHaveLength(0);
+        } finally {
+            close();
+        }
+    });
+
+    it('should report the same budget through the version-agnostic accessor', async () => {
+        const { close, stream } = await subscribe(DEFAULT_GRPC_ENDPOINT, ALL_TRANSACTIONS_REQUEST);
+        try {
+            const firstV1 = firstV1Message(stream);
+
+            await sendV1(createClients());
+            const budget = computeBudgetOfMessage(await firstV1);
+
+            expect(budget.computeUnitLimit).toBe(EXAMPLE_CONFIG.computeUnitLimit);
+            expect(budget.priorityFeeLamports).toBe(EXAMPLE_CONFIG.priorityFeeLamports);
+        } finally {
+            close();
+        }
+    });
+});

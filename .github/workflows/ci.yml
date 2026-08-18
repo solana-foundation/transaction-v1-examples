@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  SOLANA_VERSION: 4.2.1
+  YELLOWSTONE_TAG: v15.1.2+solana.4.2.0
+
+jobs:
+  check:
+    name: Format, lint, typecheck, offline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The runner's rustup honours rust/rust-toolchain.toml, installing the
+      # pinned channel and its clippy/rustfmt components on first use.
+      - run: rustup show
+        working-directory: rust
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - uses: extractions/setup-just@v3
+
+      - name: Install TypeScript dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ts
+
+      - run: just fmt-check
+      - run: just lint
+      - run: just typecheck
+      - run: just test
+
+  live:
+    name: Live tests against a v1 validator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - run: rustup show
+        working-directory: rust
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - uses: extractions/setup-just@v3
+
+      - name: Install TypeScript dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ts
+
+      # solana-test-validator activates every feature at genesis, so the
+      # enable_tx_v1 gate is live from slot 0 on any 4.2+ release.
+      - name: Install the Anza CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Verify the CLI version
+        run: solana --version
+
+      # x86_64 Linux is the one platform yellowstone-grpc publishes a prebuilt
+      # plugin for, so CI skips the multi-minute source build.
+      - name: Fetch the geyser plugin
+        run: just setup-geyser
+
+      - name: Run the live tests
+        run: just test-live
+
+      - name: Upload the validator log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-log
+          path: .local/validator.log
