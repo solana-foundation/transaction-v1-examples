@@ -1,6 +1,6 @@
 # transaction-v1-examples
 
-Working examples for Solana transaction **v1** ([SIMD-0385](https://solana.com/upgrades/larger-transaction-sizes)) in Rust and TypeScript: sending, decoding, reading blocks, and indexing over Yellowstone gRPC.
+Working examples for Solana transaction **v1** ([SIMD-0385](https://solana.com/upgrades/larger-transaction-sizes)) in Rust, TypeScript, and Python: sending, decoding, reading blocks, and indexing over Yellowstone gRPC.
 
 Every example runs against a local `solana-test-validator` from Anza CLI 4.2.1 or Surfpool 1.5+, and the whole suite is exercised in CI.
 
@@ -23,7 +23,7 @@ Existing pipelines that derives priority fees or compute budget by scanning inst
 
 ```sh
 just setup-solana     # Anza CLI 4.2.1
-just setup            # Rust + TypeScript dependencies
+just setup            # Rust, TypeScript, and Python dependencies
 just demo             # start a validator, run every example, shut it down
 ```
 
@@ -43,17 +43,19 @@ solana -u l feature status txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL
 
 ## Examples
 
-Each example exists in both languages and prints the same facts, except where the table says otherwise.
+Each example prints the same facts in every language that has it, except where the table says otherwise.
 
-| What | Rust | TypeScript |
-|---|---|---|
-| Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` |
-| Read a block holding v1 transactions | `just get-block` | `just ts-get-block` |
-| Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` |
-| Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` |
-| Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` |
+| What | Rust | TypeScript | Python |
+|---|---|---|---|
+| Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` |
+| Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` |
+| Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — |
+| Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — |
+| Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — |
 
-Source: [`rust/src/bin/`](rust/src/bin) and [`ts/src/`](ts/src).
+Source: [`rust/src/bin/`](rust/src/bin), [`ts/src/`](ts/src), and [`python/examples/`](python/examples).
+
+Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
 
 ## Common gotchas
 
@@ -114,6 +116,7 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `@solana/kit` | 7.1.1 | v1 codecs, config setters, `maxSupportedTransactionVersion: 1` |
 | `@solana/kit` | `8.0.0-canary` | **unreleased** — see below. First version to type `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)) |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
+| `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
 
 ### These examples pin a `@solana/kit` canary
 
@@ -158,9 +161,12 @@ rust/tests/           offline and live tests
 ts/src/               TypeScript example scripts, one per example
 ts/src/lib/           the modules they share
 ts/test/              offline and live tests
+python/examples/      Python example scripts, one per example
+python/src/txv1/      the package they share
+python/tests/         offline and live tests
 scripts/              validator and geyser plugin bootstrap
 ```
 
-Each language directory is self-contained: `rust/` is a single Cargo package and `ts/` a single pnpm package, both driven from the root `Justfile`.
+Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a single pnpm package, and `python/` a single hatchling package, all driven from the root `Justfile`.
 
-Both languages separate the runnable examples from the code they share. A file directly under `ts/src/` or in `rust/src/bin/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/` and directly under `rust/src/` is importable and free of side effects, and the two mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer.
+Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, or in `python/examples/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, and in `python/src/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. Python has no `budget` or `grpc`, since it ships no gRPC example.

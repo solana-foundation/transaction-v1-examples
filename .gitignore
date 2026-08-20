@@ -6,6 +6,14 @@ node_modules/
 ts/dist/
 *.tsbuildinfo
 
+# Python
+python/.venv/
+__pycache__/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # Local validator + geyser artifacts
 /.local/
 test-ledger/
