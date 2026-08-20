@@ -43,6 +43,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: ts/pnpm-lock.yaml
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
       - uses: extractions/setup-just@v3
 
       - name: Install TypeScript dependencies
@@ -76,6 +80,10 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: ts/pnpm-lock.yaml
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
 
       - uses: extractions/setup-just@v3
 
