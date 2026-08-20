@@ -38,3 +38,9 @@ run_indexer "ts grpc-tx-indexer" \
 
 run_indexer "ts grpc-block-indexer" \
     env TXV1_EXIT_AFTER_V1_BLOCKS=1 pnpm --dir "$ROOT/ts" exec tsx "$ROOT/ts/src/grpc-block-indexer.ts"
+
+run_indexer "go grpc-tx-indexer" \
+    go -C "$ROOT/go" run ./cmd/grpc-tx-indexer -exit-after-v1 1
+
+run_indexer "go grpc-block-indexer" \
+    go -C "$ROOT/go" run ./cmd/grpc-block-indexer -exit-after-v1-blocks 1

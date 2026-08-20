@@ -1,6 +1,6 @@
 # transaction-v1-examples
 
-Working examples for Solana transaction **v1** ([SIMD-0385](https://solana.com/upgrades/larger-transaction-sizes)) in Rust, TypeScript, and Python: sending, decoding, reading blocks, and indexing over Yellowstone gRPC.
+Working examples for Solana transaction **v1** ([SIMD-0385](https://solana.com/upgrades/larger-transaction-sizes)) in Rust, TypeScript, Python, and Go: sending, decoding, reading blocks, and indexing over Yellowstone gRPC.
 
 Every example runs against a local `solana-test-validator` from Anza CLI 4.2.1 or Surfpool 1.5+, and the whole suite is exercised in CI.
 
@@ -23,7 +23,7 @@ Existing pipelines that derives priority fees or compute budget by scanning inst
 
 ```sh
 just setup-solana     # Anza CLI 4.2.1
-just setup            # Rust, TypeScript, and Python dependencies
+just setup            # Rust, TypeScript, Python, and Go dependencies
 just demo             # start a validator, run every example, shut it down
 ```
 
@@ -45,15 +45,15 @@ solana -u l feature status txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL
 
 Each example prints the same facts in every language that has it, except where the table says otherwise.
 
-| What | Rust | TypeScript | Python |
-|---|---|---|---|
-| Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` |
-| Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` |
-| Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — |
-| Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — |
-| Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — |
+| What | Rust | TypeScript | Python | Go |
+|---|---|---|---|---|
+| Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` | `just go-send-decode` |
+| Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` | `just go-get-block` |
+| Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — | — |
+| Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
+| Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
 
-Source: [`rust/src/bin/`](rust/src/bin), [`ts/src/`](ts/src), and [`python/examples/`](python/examples).
+Source: [`rust/src/bin/`](rust/src/bin), [`ts/src/`](ts/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
 
 Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
 
@@ -75,9 +75,11 @@ match (&message.config, message.versioned) {
 
 **Stale generated protobuf drops the config.** `config` was added to the `Message` protobuf as field 7, and protobuf clients silently discard fields their generated schema does not know about. So a consumer built before that field existed decodes a v1 message into something that looks exactly like v0 with no compute budget — no error, just missing data. On the TypeScript side the field arrived in `@triton-one/yellowstone-grpc` 6.0.0; every 5.x release drops it, so a pin like `^5.0.9` is enough to lose every v1 budget.
 
+Go has no release that carries the field at all. yellowstone-grpc ships its Go client as pre-generated code checked into `examples/golang/proto/`, and that code was generated before field 7 was added — so on the tag whose geyser plugin *sends* the config, the Go client that ships alongside it silently drops it. [`scripts/gen-go-proto.sh`](scripts/gen-go-proto.sh) generates [`go/pb/`](go/pb) from the tag's `.proto` instead, and fails loudly if `Message.config` is missing from the result.
+
 ## Reading a budget that works for every version
 
-The examples above isolate v1, but a real indexer has to handle all three versions with one accessor. That is [`rust/src/budget.rs`](rust/src/budget.rs) and [`ts/src/lib/budget.ts`](ts/src/lib/budget.ts): read `config` on v1, scan ComputeBudget instructions on legacy and v0, and normalise the priority fee so the two are comparable.
+The examples above isolate v1, but a real indexer has to handle all three versions with one accessor. That is [`rust/src/budget.rs`](rust/src/budget.rs), [`ts/src/lib/budget.ts`](ts/src/lib/budget.ts), and [`go/txv1/budget.go`](go/txv1/budget.go): read `config` on v1, scan ComputeBudget instructions on legacy and v0, and normalise the priority fee so the two are comparable.
 
 The fee is the fiddly part. v0 states a *price* in micro-lamports per compute unit; v1 states a *total* in lamports. Comparing them means multiplying the v0 price by the compute unit limit — including the implicit `min(200_000 × instructions, 1_400_000)` limit when the transaction never set one — and rounding up:
 
@@ -105,6 +107,8 @@ The priority fee is the one that does not port, for the same reason it complicat
 
 `setTransactionMessageConfig` merges into whatever config the message already holds, so `EXAMPLE_CONFIG` in [`ts/src/send-decode.ts`](ts/src/send-decode.ts) could equally be built up one field at a time; passing `undefined` for a field unsets it, and unsetting the last one removes `config` from the message altogether. [`ts/test/wire.test.ts`](ts/test/wire.test.ts) pins all of this down offline.
 
+`solana-go` draws the line in the other place. `solana.TransactionV1Config(config)` both selects the v1 format and carries the whole budget, and its `With*` methods chain onto a zero `solana.TransactionConfig`, so there is one setter rather than six and no way to reach for the wrong one. What kit rejects at compile time, `solana.NewTransaction` rejects at runtime: passing a ComputeBudget instruction or an address lookup table alongside a v1 config is an error, not a silently ignored no-op. [`go/txv1/wire_test.go`](go/txv1/wire_test.go) pins the same wire-level facts down offline.
+
 ## Version requirements
 
 | Component | Minimum | Why |
@@ -117,13 +121,20 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `@solana/kit` | `8.0.0-canary` | **unreleased** — see below. First version to type `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)) |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
+| Go | 1.24 | the toolchain `solana-go` itself requires |
+| `solana-go` | unreleased | **see below** — v1 lives in [solana-go#481](https://github.com/solana-foundation/solana-go/pull/481), still open |
+
+### These examples pin `yellowstone-grpc-proto` directly
+
+`yellowstone-grpc-client` 13.3.0 only requires `yellowstone-grpc-proto = "12.5.0"`, and 12.5.0 has no field 7 — so on a lockfile written before 2026-08-13 the resolver picks a proto crate that drops every v1 config without erroring. [`rust/Cargo.toml`](rust/Cargo.toml) pins 12.6.0 directly so that cannot happen, and CI runs `--locked` so a resolution change fails the build rather than drifting.
 
 ### These examples pin a `@solana/kit` canary
 
-npm `latest` is 7.1.1; 8.0.0 is not published yet. `ts/package.json` pins an exact 8.0.0 canary because 8.x is the first release whose types accept version 1 in `createTransactionMessage`, which is what lets a v1 message be built through the same `pipe` as a legacy or v0 one. 
+npm `latest` is 7.1.1; 8.0.0 is not published yet. `ts/package.json` pins an exact 8.0.0 canary because 8.x is the first release whose types accept version 1 in `createTransactionMessage`, which is what lets a v1 message be built through the same `pipe` as a legacy or v0 one.
 
+### These examples pin an unmerged `solana-go` branch
 
-`yellowstone-grpc-client` 13.3.0 only requires `yellowstone-grpc-proto = "12.5.0"`, and 12.5.0 has no field 7 — so on a lockfile written before 2026-08-13 the resolver picks a proto crate that drops every v1 config without erroring. [`rust/Cargo.toml`](rust/Cargo.toml) pins 12.6.0 directly so that cannot happen, and CI runs `--locked` so a resolution change fails the build rather than drifting.
+SIMD-0385 support is not in any `solana-go` release: it is [PR #481](https://github.com/solana-foundation/solana-go/pull/481), which adds `solana.TransactionConfig`, `solana.MessageVersionV1`, and the `solana.TransactionV1Config` build option. [`go/go.mod`](go/go.mod) therefore carries a `replace` onto the PR branch, pinned by commit. When the PR merges, the `replace` comes out and the `require` moves to the release that carries it.
 
 ## Configuration
 
@@ -134,11 +145,11 @@ Every example reads its endpoints from the environment, and the Rust binaries al
 | `TXV1_RPC_URL` | `http://127.0.0.1:8899` | all examples and tests |
 | `TXV1_RPC_SUBSCRIPTIONS_URL` | `ws://127.0.0.1:8900` | TypeScript examples and tests |
 | `TXV1_GRPC_URL` | `http://127.0.0.1:10000` | gRPC indexers and tests |
-| `TXV1_LIVE` | unset | set to `1` to un-skip the TypeScript live tests |
-| `TXV1_EXIT_AFTER_V1` | unset | stop the TypeScript transaction indexer after N v1 transactions |
-| `TXV1_EXIT_AFTER_V1_BLOCKS` | unset | stop the TypeScript block indexer after N blocks holding v1 |
+| `TXV1_LIVE` | unset | set to `1` to un-skip the TypeScript and Go live tests |
+| `TXV1_EXIT_AFTER_V1` | unset | stop the TypeScript or Go transaction indexer after N v1 transactions |
+| `TXV1_EXIT_AFTER_V1_BLOCKS` | unset | stop the TypeScript or Go block indexer after N blocks holding v1 |
 
-Rust flags: `--rpc-url`, `--grpc-url`, `--slot` (get-block), `--exit-after-v1` / `--exit-after-v1-blocks` (indexers).
+Rust flags: `--rpc-url`, `--grpc-url`, `--slot` (get-block), `--exit-after-v1` / `--exit-after-v1-blocks` (indexers). The Go commands take the same names with Go's single-dash spelling: `-rpc-url`, `-grpc-url`, `-slot`, `-exit-after-v1`, `-exit-after-v1-blocks`.
 
 ## Testing
 
@@ -164,9 +175,12 @@ ts/test/              offline and live tests
 python/examples/      Python example scripts, one per example
 python/src/txv1/      the package they share
 python/tests/         offline and live tests
-scripts/              validator and geyser plugin bootstrap
+go/cmd/               Go example commands, one per example
+go/txv1/              the Go package they share, plus offline and live tests
+go/pb/                generated Yellowstone protobuf bindings
+scripts/              validator, geyser plugin, and protobuf bootstrap
 ```
 
-Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a single pnpm package, and `python/` a single hatchling package, all driven from the root `Justfile`.
+Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a single pnpm package, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
 
-Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, or in `python/examples/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, and in `python/src/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. Python has no `budget` or `grpc`, since it ships no gRPC example.
+Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
