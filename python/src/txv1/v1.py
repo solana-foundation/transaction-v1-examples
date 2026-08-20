@@ -45,8 +45,9 @@ def decode_transaction_version(
         wire_transaction: The signed transaction exactly as it goes on the wire.
     """
     message = VersionedTransaction.from_bytes(wire_transaction).message
-    version = message_version(message)
-    return version, message.config if isinstance(message, MessageV1) else None
+    if isinstance(message, MessageV1):
+        return MessageVersion.V1, message.config
+    return message_version(message), None
 
 
 def format_config(config: TransactionConfig | None, indent: str = "  ") -> str:
