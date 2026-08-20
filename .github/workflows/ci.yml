@@ -34,6 +34,8 @@ jobs:
           workspaces: rust
 
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ts/package.json
 
       - uses: actions/setup-node@v5
         with:
@@ -66,6 +68,8 @@ jobs:
           workspaces: rust
 
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ts/package.json
 
       - uses: actions/setup-node@v5
         with:
