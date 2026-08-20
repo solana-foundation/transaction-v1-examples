@@ -8,10 +8,11 @@ _default:
 
 # Setup
 
-# Install Rust, TypeScript, and Python dependencies.
+# Install Rust, TypeScript, Python, and Go dependencies.
 setup: _py-install
     cd rust && cargo fetch --locked
     cd ts && pnpm install
+    cd go && go mod download
 
 # Create the Python virtualenv and install the package into it.
 [private]
@@ -31,17 +32,23 @@ setup-solana:
 setup-geyser:
     YELLOWSTONE_TAG={{ yellowstone_tag }} ./scripts/setup-geyser.sh
 
+# Regenerate go/pb/ from the pinned yellowstone-grpc protobuf definitions.
+gen-go-proto:
+    YELLOWSTONE_TAG={{ yellowstone_tag }} ./scripts/gen-go-proto.sh
+
 # Formatting
 
 fmt: _py-install
     cd rust && cargo fmt --all
     cd ts && pnpm exec oxfmt .
     cd python && .venv/bin/ruff format .
+    cd go && gofmt -w .
 
 fmt-check: _py-install
     cd rust && cargo fmt --all --check
     cd ts && pnpm exec oxfmt --check .
     cd python && .venv/bin/ruff format --check .
+    cd go && test -z "$(gofmt -l .)"
 
 # Linting
 
@@ -49,10 +56,12 @@ lint: _py-install
     cd rust && cargo clippy --locked --all-targets -- -D warnings
     cd ts && pnpm exec oxlint
     cd python && .venv/bin/ruff check .
+    cd go && go vet ./...
 
 typecheck: _py-install
     cd ts && pnpm exec tsc -p tsconfig.json --noEmit
     cd python && .venv/bin/mypy
+    cd go && go build ./...
 
 # Testing
 
@@ -61,6 +70,7 @@ test: _py-install
     cd rust && cargo test --locked
     cd ts && pnpm exec vitest run test/wire.test.ts test/budget.test.ts
     cd python && .venv/bin/pytest
+    cd go && go test ./...
 
 # Every test, including the ones that need a validator and geyser plugin.
 test-live: _py-install
@@ -72,6 +82,7 @@ _test-live-inner:
     cd rust && cargo test --locked -- --include-ignored --test-threads=1
     cd ts && TXV1_LIVE=1 pnpm exec vitest run
     cd python && .venv/bin/pytest -m live
+    cd go && TXV1_LIVE=1 go test ./... -p 1
 
 # Everything CI runs, minus the live tests.
 check: fmt-check lint typecheck test
@@ -118,6 +129,17 @@ py-send-decode: _py-install
 
 py-get-block slot="": _py-install
     cd python && .venv/bin/python examples/get_block.py {{ slot }}
+go-send-decode:
+    cd go && go run ./cmd/send-decode
+
+go-get-block slot="":
+    cd go && go run ./cmd/get-block {{ if slot == "" { "" } else { "-slot " + slot } }}
+
+go-grpc-tx-indexer:
+    cd go && go run ./cmd/grpc-tx-indexer
+
+go-grpc-block-indexer:
+    cd go && go run ./cmd/grpc-block-indexer
 
 # Run every example end to end against a fresh validator.
 demo:
@@ -133,4 +155,6 @@ _demo-inner:
     just ts-get-block
     just py-send-decode
     just py-get-block
+    just go-send-decode
+    just go-get-block
     ./scripts/demo-indexers.sh
