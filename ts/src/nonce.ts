@@ -152,7 +152,7 @@ if (local.config === undefined || remote.config === undefined || !areV1ConfigsEq
 }
 console.log('  config round-tripped exactly');
 
-// Nonce after advancing should be different 
+// Nonce after advancing should be different
 const { data: advanced } = await fetchNonce(clients.rpc, nonceAccount.address, { commitment: 'confirmed' });
 console.log('\n== nonce after the transaction ==');
 console.log(`  before: ${nonce}`);
