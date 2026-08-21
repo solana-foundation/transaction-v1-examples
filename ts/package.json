@@ -11,7 +11,7 @@
     "dependencies": {
         "@solana-program/compute-budget": "^0.17.0",
         "@solana-program/system": "^0.13.0",
-        "@solana/kit": "8.0.0-canary-20260819190144",
+        "@solana/kit": "^8.0.0",
         "@triton-one/yellowstone-grpc": "6.0.0"
     },
     "devDependencies": {
