@@ -117,8 +117,7 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `solana-message` | 4.2.0 | `v1::Message` landed in 4.1.0; 4.2.0 adds the inherent `Message::serialize()` these examples call |
 | `yellowstone-grpc-proto` | 12.6.0 | first release whose generated code has `Message.config` |
 | yellowstone-grpc geyser | 15.1.1 | `convert_from` no longer downgrades v1 to v0 |
-| `@solana/kit` | 7.1.1 | v1 codecs, config setters, `maxSupportedTransactionVersion: 1` |
-| `@solana/kit` | `8.0.0-canary` | **unreleased** — see below. First version to type `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)) |
+| `@solana/kit` | 8.0.0 | v1 codecs, config setters, and `maxSupportedTransactionVersion: 1` landed in 7.1.1; 8.0.0 is the first version to type `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)), which is what lets a v1 message be built through the same `pipe` as a legacy or v0 one |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
 | Go | 1.24 | the toolchain `solana-go` itself requires |
@@ -127,10 +126,6 @@ The priority fee is the one that does not port, for the same reason it complicat
 ### These examples pin `yellowstone-grpc-proto` directly
 
 `yellowstone-grpc-client` 13.3.0 only requires `yellowstone-grpc-proto = "12.5.0"`, and 12.5.0 has no field 7 — so on a lockfile written before 2026-08-13 the resolver picks a proto crate that drops every v1 config without erroring. [`rust/Cargo.toml`](rust/Cargo.toml) pins 12.6.0 directly so that cannot happen, and CI runs `--locked` so a resolution change fails the build rather than drifting.
-
-### These examples pin a `@solana/kit` canary
-
-npm `latest` is 7.1.1; 8.0.0 is not published yet. `ts/package.json` pins an exact 8.0.0 canary because 8.x is the first release whose types accept version 1 in `createTransactionMessage`, which is what lets a v1 message be built through the same `pipe` as a legacy or v0 one.
 
 ### These examples pin an unmerged `solana-go` branch
 
