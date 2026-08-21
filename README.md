@@ -50,6 +50,7 @@ Each example prints the same facts in every language that has it, except where t
 | Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` | `just go-send-decode` |
 | Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` | `just go-get-block` |
 | Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — | — |
+| Send a v1 transfer under a durable nonce lifetime | — | `just ts-nonce` | — | — |
 | Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
 | Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
