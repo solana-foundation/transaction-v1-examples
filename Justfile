@@ -115,6 +115,9 @@ ts-send-decode:
 ts-estimate:
     cd ts && pnpm exec tsx src/estimate.ts
 
+ts-nonce:
+    cd ts && pnpm exec tsx src/nonce.ts
+
 ts-get-block slot="":
     cd ts && pnpm exec tsx src/get-block.ts {{ slot }}
 
@@ -152,6 +155,7 @@ _demo-inner:
     just get-block
     just ts-send-decode
     just ts-estimate
+    just ts-nonce
     just ts-get-block
     just py-send-decode
     just py-get-block
