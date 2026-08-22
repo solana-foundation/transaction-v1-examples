@@ -2,6 +2,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 solana_version := "4.2.1"
 yellowstone_tag := "v15.1.2+solana.4.2.0"
+token_2022_tag := "program@v11.0.0"
 
 _default:
     @just --list
@@ -31,6 +32,10 @@ setup-solana:
 # Fetch or build the Yellowstone geyser plugin into .local/.
 setup-geyser:
     YELLOWSTONE_TAG={{ yellowstone_tag }} ./scripts/setup-geyser.sh
+
+# Fetch the Token-2022 program the validator loads for confidential transfers.
+setup-token-2022:
+    TOKEN_2022_TAG={{ token_2022_tag }} ./scripts/setup-token-2022.sh
 
 # Regenerate go/pb/ from the pinned yellowstone-grpc protobuf definitions.
 gen-go-proto:
@@ -90,7 +95,7 @@ check: fmt-check lint typecheck test
 # Local validator
 
 validator-start:
-    YELLOWSTONE_TAG={{ yellowstone_tag }} ./scripts/validator.sh start
+    YELLOWSTONE_TAG={{ yellowstone_tag }} TOKEN_2022_TAG={{ token_2022_tag }} ./scripts/validator.sh start
 
 validator-stop:
     ./scripts/validator.sh stop
@@ -114,6 +119,9 @@ ts-send-decode:
 
 ts-estimate:
     cd ts && pnpm exec tsx src/estimate.ts
+
+ts-confidential-transfer:
+    cd ts && pnpm exec tsx src/confidential-transfer.ts
 
 ts-get-block slot="":
     cd ts && pnpm exec tsx src/get-block.ts {{ slot }}
@@ -153,6 +161,7 @@ _demo-inner:
     just ts-send-decode
     just ts-estimate
     just ts-get-block
+    just ts-confidential-transfer
     just py-send-decode
     just py-get-block
     just go-send-decode

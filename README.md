@@ -50,12 +50,28 @@ Each example prints the same facts in every language that has it, except where t
 | Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` | `just go-send-decode` |
 | Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` | `just go-get-block` |
 | Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — | — |
+| Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
 | Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
 
 Source: [`rust/src/bin/`](rust/src/bin), [`ts/src/`](ts/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
 
 Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
+
+## Do more with Larger Transactions
+
+v1 raises the transaction size limit from **1,232 bytes to 4,096**, enabling things like the ability to send a [Token-2022 confidential transfer](https://solana.com/docs/tokens/extensions/confidential-transfer) in a single transaction. A confidential transfer is three client-generated zero-knowledge proofs, each written into its own context state account, then the transfer instruction that reads all three, then three closes to reclaim the rent. `@solana-program/token-2022` hands that back as an `InstructionPlan` for a transaction planner to split, because under the legacy limit it cannot be one transaction.
+
+With v1, it all fits into a single transaction. [`just ts-confidential-transfer`](ts/src/confidential-transfer.ts) assembles the transfer, packs it into a single v1 message, and sends it as an atomic transaction.
+
+
+### The local validator needs a different Token-2022
+
+`solana-test-validator` bundles a Token-2022 build with the `zk-ops` feature compiled out. Every confidential-transfer instruction that moves an amount — `Deposit`, `Withdraw`, `Transfer`, `ApplyPendingBalance` — returns `InvalidInstructionData` without looking at its arguments, while the instructions that only configure an account are not behind the feature and succeed. So an account configures cleanly and every transfer against it fails, with an error that says nothing about a missing feature.
+
+[`scripts/setup-token-2022.sh`](scripts/setup-token-2022.sh) fetches the program published with a token-2022 release — the same binary mainnet runs — and [`scripts/validator.sh`](scripts/validator.sh) loads it at the Token-2022 address instead.
+
+That only happens for a validator this script starts. `just validator-start` reuses one that is already answering on 8899, and a validator started by hand keeps the bundled program and takes the failure above. So the script compares the deployed program's length against the one it fetched, and refuses to hand back a validator that cannot run a confidential transfer.
 
 ## Common gotchas
 
@@ -118,6 +134,9 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `yellowstone-grpc-proto` | 12.6.0 | first release whose generated code has `Message.config` |
 | yellowstone-grpc geyser | 15.1.1 | `convert_from` no longer downgrades v1 to v0 |
 | `@solana/kit` | 8.0.0 | v1 codecs, config setters, and `maxSupportedTransactionVersion: 1` landed in 7.1.1; 8.0.0 is the first version to type `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)), which is what lets a v1 message be built through the same `pipe` as a legacy or v0 one |
+| `@solana-program/token-2022` | 0.15.0 | the `confidential` entry point, its instruction-plan helpers, and `solana-conf-bal/v1` key derivation |
+| `@solana/zk-sdk` | 0.5.1 | the WASM proof generation the confidential helpers call |
+| Token-2022 program | `program@v11.0.0` | a build with `zk-ops` enabled — see above |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
 | Go | 1.24 | the toolchain `solana-go` itself requires |
@@ -140,6 +159,7 @@ Every example reads its endpoints from the environment, and the Rust binaries al
 | `TXV1_RPC_URL` | `http://127.0.0.1:8899` | all examples and tests |
 | `TXV1_RPC_SUBSCRIPTIONS_URL` | `ws://127.0.0.1:8900` | TypeScript examples and tests |
 | `TXV1_GRPC_URL` | `http://127.0.0.1:10000` | gRPC indexers and tests |
+| `TOKEN_2022_TAG` | `program@v11.0.0` | which Token-2022 release the validator scripts fetch; the `just` recipes pin it, so override with `just --set token_2022_tag …` |
 | `TXV1_LIVE` | unset | set to `1` to un-skip the TypeScript and Go live tests |
 | `TXV1_EXIT_AFTER_V1` | unset | stop the TypeScript or Go transaction indexer after N v1 transactions |
 | `TXV1_EXIT_AFTER_V1_BLOCKS` | unset | stop the TypeScript or Go block indexer after N blocks holding v1 |
@@ -173,9 +193,9 @@ python/tests/         offline and live tests
 go/cmd/               Go example commands, one per example
 go/txv1/              the Go package they share, plus offline and live tests
 go/pb/                generated Yellowstone protobuf bindings
-scripts/              validator, geyser plugin, and protobuf bootstrap
+scripts/              validator, geyser plugin, Token-2022, and protobuf bootstrap
 ```
 
 Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a single pnpm package, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
 
-Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
+Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.

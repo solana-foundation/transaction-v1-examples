@@ -14,9 +14,15 @@ importers:
       '@solana-program/system':
         specifier: ^0.13.0
         version: 0.13.0(@solana/kit@8.0.0(typescript@5.9.3))
+      '@solana-program/token-2022':
+        specifier: ^0.15.0
+        version: 0.15.0(@solana/kit@8.0.0(typescript@5.9.3))(@solana/sysvars@8.0.0(typescript@5.9.3))(@solana/zk-sdk@0.5.1)
       '@solana/kit':
         specifier: ^8.0.0
         version: 8.0.0(typescript@5.9.3)
+      '@solana/zk-sdk':
+        specifier: ^0.5.1
+        version: 0.5.1
       '@triton-one/yellowstone-grpc':
         specifier: 6.0.0
         version: 6.0.0(typescript@5.9.3)
@@ -216,6 +222,14 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@noble/curves@1.9.7':
+    resolution: {integrity: sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@oxfmt/binding-android-arm-eabi@0.48.0':
     resolution: {integrity: sha512-uwqk+/KhQvBIpULD8SMM/zAafMRC/+DV/xsEQjkkIsJ/kLmEI/2bxonVowcYTiXqqZ/a0FEW8DPkZY3VvwELDA==}
@@ -646,8 +660,30 @@ packages:
     peerDependencies:
       '@solana/kit': ^7.0.0
 
+  '@solana-program/record@0.3.0':
+    resolution: {integrity: sha512-q8z86INfXRQ5357qgVBrw05vC+u3xg8Vb4E1gEwnYUvAkL3cbJSjWVfTlGRiGWYmPNq/FYIWbsFrhsxXyhaJ+w==}
+    engines: {node: '>=24.0.0'}
+    peerDependencies:
+      '@solana/kit': ^7.0.0
+
   '@solana-program/system@0.13.0':
     resolution: {integrity: sha512-Id6QQxCG7ByImXPD5X/c3Ag2kySD+49aJ9waIkfxyUFyokhMQgxYQAx2rKuaygaBlaBQY6VVfBS46pqxZV+99A==}
+    peerDependencies:
+      '@solana/kit': ^7.0.0
+
+  '@solana-program/token-2022@0.15.0':
+    resolution: {integrity: sha512-Q9vR9kzP+l9AVWt2Uj5nH44BrnotiLFmX3AYDgsFQfuTla9n66RokNPGaSrCMUvQS0xRBv/u9BhH4p39qdB9Hw==}
+    engines: {node: '>=24.0.0'}
+    peerDependencies:
+      '@solana/kit': ^7.0.0
+      '@solana/sysvars': ^7.0.0
+      '@solana/zk-sdk': ^0.5.1
+    peerDependenciesMeta:
+      '@solana/zk-sdk':
+        optional: true
+
+  '@solana-program/zk-elgamal-proof@0.3.2':
+    resolution: {integrity: sha512-bCiRVKtqYZpajgC2RVypZL4A0xHjQYVEsVSNMTtPJ1jjE5KOUvsXhnngGMYShK6BHv+fQP4F8QKvEVW/HOSFAg==}
     peerDependencies:
       '@solana/kit': ^7.0.0
 
@@ -1244,6 +1280,9 @@ packages:
       typescript:
         optional: true
 
+  '@solana/zk-sdk@0.5.1':
+    resolution: {integrity: sha512-dWGAzjApjsVGtwllaXxlD2DxpCdTD4yr1eMQOJBSZglTe0dtVW2TFShABRNkWtD11ZekZ+6kODVSDkWt6RL7mw==}
+
   '@triton-one/yellowstone-grpc-napi-darwin-arm64@0.1.0':
     resolution: {integrity: sha512-ilXaYjRcoB9vNXV0uoW11Ho3fnsmJViOd/+yD/EPoVxYfFWOKnCDqmXIbmwBtflV9XDiXe/MmjzZWE0OWI17gA==}
     cpu: [arm64]
@@ -1672,6 +1711,12 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
+  '@noble/curves@1.9.7':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
+  '@noble/hashes@1.8.0': {}
+
   '@oxfmt/binding-android-arm-eabi@0.48.0':
     optional: true
 
@@ -1888,8 +1933,27 @@ snapshots:
     dependencies:
       '@solana/kit': 8.0.0(typescript@5.9.3)
 
+  '@solana-program/record@0.3.0(@solana/kit@8.0.0(typescript@5.9.3))':
+    dependencies:
+      '@solana/kit': 8.0.0(typescript@5.9.3)
+
   '@solana-program/system@0.13.0(@solana/kit@8.0.0(typescript@5.9.3))':
     dependencies:
+      '@solana/kit': 8.0.0(typescript@5.9.3)
+
+  '@solana-program/token-2022@0.15.0(@solana/kit@8.0.0(typescript@5.9.3))(@solana/sysvars@8.0.0(typescript@5.9.3))(@solana/zk-sdk@0.5.1)':
+    dependencies:
+      '@noble/curves': 1.9.7
+      '@solana-program/record': 0.3.0(@solana/kit@8.0.0(typescript@5.9.3))
+      '@solana-program/zk-elgamal-proof': 0.3.2(@solana/kit@8.0.0(typescript@5.9.3))
+      '@solana/kit': 8.0.0(typescript@5.9.3)
+      '@solana/sysvars': 8.0.0(typescript@5.9.3)
+    optionalDependencies:
+      '@solana/zk-sdk': 0.5.1
+
+  '@solana-program/zk-elgamal-proof@0.3.2(@solana/kit@8.0.0(typescript@5.9.3))':
+    dependencies:
+      '@solana-program/system': 0.13.0(@solana/kit@8.0.0(typescript@5.9.3))
       '@solana/kit': 8.0.0(typescript@5.9.3)
 
   '@solana/accounts@8.0.0(typescript@5.9.3)':
@@ -2580,6 +2644,8 @@ snapshots:
       typescript: 5.9.3
     transitivePeerDependencies:
       - fastestsmallesttextencoderdecoder
+
+  '@solana/zk-sdk@0.5.1': {}
 
   '@triton-one/yellowstone-grpc-napi-darwin-arm64@0.1.0':
     optional: true

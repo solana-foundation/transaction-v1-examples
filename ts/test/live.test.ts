@@ -5,9 +5,41 @@
  * 4.2.1 validator with the Yellowstone geyser plugin.
  */
 
+import { fetchMint, fetchToken } from '@solana-program/token-2022';
+import {
+    fetchConfidentialTransferBalance,
+    getConfidentialTransferInstructionPlan,
+} from '@solana-program/token-2022/confidential';
+import {
+    airdropFactory,
+    appendTransactionMessageInstructions,
+    assertIsTransactionWithBlockhashLifetime,
+    createTransactionMessage,
+    estimateAndSetResourceLimitsFactory,
+    estimateResourceLimitsFactory,
+    fillTransactionMessageProvisoryResourceLimits,
+    flattenInstructionPlan,
+    generateKeyPairSigner,
+    getTransactionMessageSize,
+    getTransactionMessageSizeLimit,
+    isSingleInstructionPlan,
+    lamports,
+    pipe,
+    setTransactionMessageFeePayerSigner,
+    setTransactionMessageLifetimeUsingBlockhash,
+    setTransactionMessagePriorityFeeLamports,
+    signTransactionMessageWithSigners,
+} from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
 import { computeBudgetOfMessage } from '../src/lib/budget';
+import {
+    applyPendingBalance,
+    type ConfidentialParty,
+    createConfidentialMint,
+    createConfidentialParty,
+    fundConfidentially,
+} from '../src/lib/confidential';
 import {
     ALL_TRANSACTIONS_REQUEST,
     DEFAULT_GRPC_ENDPOINT,
@@ -143,4 +175,83 @@ describe.skipIf(!live)('the gRPC transaction stream', () => {
             close();
         }
     });
+});
+
+describe.skipIf(!live)('a Token-2022 confidential transfer', () => {
+    it('should fit the whole plan in one v1 transaction and settle both balances', async () => {
+        const clients = createClients();
+        const payer = await generateKeyPairSigner();
+        await airdropFactory(clients)({
+            commitment: 'confirmed',
+            lamports: lamports(20_000_000_000n),
+            recipientAddress: payer.address,
+        });
+
+        const mint = await createConfidentialMint(clients, payer);
+        const sender = await createConfidentialParty(clients, payer, mint, payer);
+        const recipient = await createConfidentialParty(clients, payer, mint, await generateKeyPairSigner());
+        await fundConfidentially(clients, payer, mint, sender, 10_000n);
+
+        const [mintAccount, sourceAccount, destinationAccount] = await Promise.all([
+            fetchMint(clients.rpc, mint),
+            fetchToken(clients.rpc, sender.token),
+            fetchToken(clients.rpc, recipient.token),
+        ]);
+        const plan = await getConfidentialTransferInstructionPlan({
+            aesKey: sender.aesKey,
+            amount: 2_500n,
+            authority: sender.owner,
+            destinationToken: recipient.token,
+            destinationTokenAccount: destinationAccount.data,
+            mint,
+            mintAccount: mintAccount.data,
+            payer,
+            rpc: clients.rpc,
+            sourceElgamalKeypair: sender.elgamalKeypair,
+            sourceToken: sender.token,
+            sourceTokenAccount: sourceAccount.data,
+        });
+
+        const instructions = flattenInstructionPlan(plan).map(single => {
+            if (!isSingleInstructionPlan(single)) {
+                throw new Error('the transfer plan holds an instruction that has to be sized against a message');
+            }
+            return single.instruction;
+        });
+
+        const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
+        const draft = pipe(
+            createTransactionMessage({ version: 1 }),
+            m => setTransactionMessageFeePayerSigner(payer, m),
+            m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
+            m => appendTransactionMessageInstructions(instructions, m),
+            m => setTransactionMessagePriorityFeeLamports(5_000n, m),
+            fillTransactionMessageProvisoryResourceLimits,
+        );
+        const message = await estimateAndSetResourceLimitsFactory(estimateResourceLimitsFactory({ rpc: clients.rpc }))(
+            draft,
+            { commitment: 'confirmed' },
+        );
+
+        // The whole transfer is one transaction, and one no legacy or v0 message
+        // could have held.
+        expect(getTransactionMessageSize(message)).toBeGreaterThan(1232);
+        expect(getTransactionMessageSize(message)).toBeLessThanOrEqual(getTransactionMessageSizeLimit(message));
+
+        const transaction = await signTransactionMessageWithSigners(message);
+        assertIsTransactionWithBlockhashLifetime(transaction);
+        await sendAndConfirm(clients, transaction);
+        await applyPendingBalance(clients, payer, recipient);
+
+        const balanceOf = async (party: ConfidentialParty) =>
+            await fetchConfidentialTransferBalance({
+                aesKey: party.aesKey,
+                elgamalSecretKey: party.elgamalKeypair.secret(),
+                rpc: clients.rpc,
+                token: party.token,
+            });
+
+        expect((await balanceOf(sender)).availableBalance).toBe(7_500n);
+        expect((await balanceOf(recipient)).availableBalance).toBe(2_500n);
+    }, 180_000);
 });
