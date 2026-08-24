@@ -56,7 +56,7 @@ import {
     sendAndConfirm,
     sendV1TransferAndGetSlot,
 } from '../src/lib/send';
-import { EXAMPLE_CONFIG } from '../src/lib/v1';
+import { decodeBase64Transaction, EXAMPLE_CONFIG } from '../src/lib/v1';
 
 const live = process.env.TXV1_LIVE === '1';
 
@@ -91,17 +91,22 @@ describe.skipIf(!live)('getTransaction', () => {
         const signature = await sendV1(clients);
 
         const fetched = await clients.rpc
-            .getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+            .getTransaction(signature, {
+                commitment: 'confirmed',
+                encoding: 'base64',
+                maxSupportedTransactionVersion: 1,
+            })
             .send();
 
         expect(fetched?.version).toBe(1);
-        // The three `u32` fields come back as numbers and only the priority
-        // fee, a `u64`, is a bigint.
-        expect(fetched!.transaction.message.transactionConfig).toStrictEqual({
+        const decoded = decodeBase64Transaction(fetched!.transaction[0]);
+        expect(decoded.signature).toBe(signature);
+        expect(decoded.version).toBe(1);
+        expect(decoded.config).toStrictEqual({
             computeUnitLimit: EXAMPLE_CONFIG.computeUnitLimit,
             heapSize: EXAMPLE_CONFIG.heapSize,
             loadedAccountsDataSizeLimit: EXAMPLE_CONFIG.loadedAccountsDataSizeLimit,
-            priorityFee: EXAMPLE_CONFIG.priorityFeeLamports,
+            priorityFeeLamports: EXAMPLE_CONFIG.priorityFeeLamports,
         });
     });
 
@@ -110,13 +115,13 @@ describe.skipIf(!live)('getTransaction', () => {
         const signature = await sendV1(clients);
 
         await expect(
-            clients.rpc.getTransaction(signature, { commitment: 'confirmed', encoding: 'json' }).send(),
+            clients.rpc.getTransaction(signature, { commitment: 'confirmed', encoding: 'base64' }).send(),
         ).rejects.toThrow(/maxSupportedTransactionVersion/);
         await expect(
             clients.rpc
                 .getTransaction(signature, {
                     commitment: 'confirmed',
-                    encoding: 'json',
+                    encoding: 'base64',
                     maxSupportedTransactionVersion: 0,
                 })
                 .send(),

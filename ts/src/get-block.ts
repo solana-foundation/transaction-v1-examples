@@ -9,6 +9,7 @@
 
 import { BLOCK_CONFIG, formatTransactionConfig } from './lib/rpc';
 import { createClients, sendV1TransferAndGetSlot } from './lib/send';
+import { decodeBase64Transaction } from './lib/v1';
 
 const clients = createClients();
 const slotArgument = process.argv[2];
@@ -57,6 +58,7 @@ for (const transaction of block.transactions) {
     if (transaction.version !== 1) {
         continue;
     }
-    console.log(`  v1 ${transaction.transaction.signatures[0]}`);
-    console.log(formatTransactionConfig(transaction.transaction.message.transactionConfig, '    '));
+    const decoded = decodeBase64Transaction(transaction.transaction[0]);
+    console.log(`  v1 ${decoded.signature}`);
+    console.log(formatTransactionConfig(decoded.config, '    '));
 }

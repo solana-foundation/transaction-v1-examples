@@ -12,7 +12,6 @@ import {
     assertIsTransactionWithBlockhashLifetime,
     createTransactionMessage,
     generateKeyPairSigner,
-    getBase64Encoder,
     getBase64EncodedWireTransaction,
     getSignatureFromTransaction,
     lamports,
@@ -26,9 +25,7 @@ import {
 import { assertV1Active } from './lib/feature';
 import { formatTransactionConfig, json } from './lib/rpc';
 import { createClients, sendAndConfirm } from './lib/send';
-import { decodeTransactionVersion, EXAMPLE_CONFIG } from './lib/v1';
-
-const decodeBase64 = (encoded: string) => decodeTransactionVersion(getBase64Encoder().encode(encoded));
+import { decodeBase64Transaction, EXAMPLE_CONFIG } from './lib/v1';
 
 const clients = createClients();
 
@@ -71,7 +68,7 @@ const transaction = await signTransactionMessageWithSigners(message);
 // narrowing has to be reasserted before confirming by blockhash.
 assertIsTransactionWithBlockhashLifetime(transaction);
 
-const local = decodeBase64(getBase64EncodedWireTransaction(transaction));
+const local = decodeBase64Transaction(getBase64EncodedWireTransaction(transaction));
 console.log('== compiled locally ==');
 console.log(`  version: ${local.version}`);
 console.log(`  config:  ${json(local.config)}`);
@@ -83,34 +80,24 @@ console.log(`\n== sent ==\n  signature: ${getSignatureFromTransaction(transactio
 // server refuses the response rather than degrading the transaction.
 console.log('\n== getTransaction without maxSupportedTransactionVersion ==');
 try {
-    await clients.rpc.getTransaction(signature, { commitment: 'confirmed', encoding: 'json' }).send();
+    await clients.rpc.getTransaction(signature, { commitment: 'confirmed', encoding: 'base64' }).send();
     console.log('  unexpectedly succeeded');
 } catch (error) {
     console.log(`  rejected: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 const fetched = await clients.rpc
-    .getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+    .getTransaction(signature, { commitment: 'confirmed', encoding: 'base64', maxSupportedTransactionVersion: 1 })
     .send();
 if (fetched === null) {
     throw new Error('the transaction just sent was not found');
 }
 
-console.log('\n== read back over JSON-RPC ==');
-console.log(`  version: ${fetched.version}`);
-console.log(formatTransactionConfig(fetched.transaction.message.transactionConfig));
-
-const encoded = await clients.rpc
-    .getTransaction(signature, { commitment: 'confirmed', encoding: 'base64', maxSupportedTransactionVersion: 1 })
-    .send();
-if (encoded === null) {
-    throw new Error('the transaction just sent was not found');
-}
-
-const remote = decodeBase64(encoded.transaction[0]);
+const remote = decodeBase64Transaction(fetched.transaction[0]);
 console.log('\n== decoded from the base64 wire bytes ==');
-console.log(`  version: ${remote.version}`);
+console.log(`  version: ${remote.version} (${fetched.version} in the response envelope)`);
 console.log(`  config:  ${json(remote.config)}`);
+console.log(formatTransactionConfig(remote.config));
 
 // `areV1ConfigsEqual` treats an absent field and an explicit zero as distinct,
 // which is the distinction the round trip has to preserve.

@@ -1,28 +1,20 @@
 /** Endpoints and display helpers for the JSON-RPC examples. */
 
-import type { TransactionConfig } from '@solana/kit';
+import type { V1TransactionConfig } from '@solana/kit';
 
 import { formatComputeBudget } from './budget';
 
 /**
- * Formats the compute budget a `getTransaction` or `getBlock` response reports.
+ * Formats the config decoded out of a transaction's wire bytes.
  *
- * The JSON-RPC projection spells an absent field as `null` where a normalised
- * budget leaves it out, so the two are bridged before formatting.
+ * A legacy or v0 transaction carries no config at all, which is a different
+ * thing from a v1 config whose fields are unset, so the two print differently.
  */
-export function formatTransactionConfig(config: TransactionConfig | undefined, indent = '  '): string {
+export function formatTransactionConfig(config: V1TransactionConfig | undefined, indent = '  '): string {
     if (config === undefined) {
-        return `${indent}no transactionConfig`;
+        return `${indent}no config: not a v1 transaction`;
     }
-    return formatComputeBudget(
-        {
-            computeUnitLimit: config.computeUnitLimit ?? undefined,
-            heapSize: config.heapSize ?? undefined,
-            loadedAccountsDataSizeLimit: config.loadedAccountsDataSizeLimit ?? undefined,
-            priorityFeeLamports: config.priorityFee ?? undefined,
-        },
-        indent,
-    );
+    return formatComputeBudget(config, indent);
 }
 
 export const DEFAULT_RPC_URL = 'http://127.0.0.1:8899';
@@ -40,7 +32,7 @@ export const json = (value: unknown) =>
  */
 export const BLOCK_CONFIG = {
     commitment: 'confirmed',
-    encoding: 'json',
+    encoding: 'base64',
     rewards: false,
     transactionDetails: 'full',
 } as const;
