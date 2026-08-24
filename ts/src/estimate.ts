@@ -89,7 +89,7 @@ const signature = await sendAndConfirm(clients, transaction);
 console.log(`\n== sent ==\n  signature: ${signature}`);
 
 const fetched = await clients.rpc
-    .getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+    .getTransaction(signature, { commitment: 'confirmed', encoding: 'base64', maxSupportedTransactionVersion: 1 })
     .send();
 if (fetched === null) {
     throw new Error('the transaction just sent was not found');

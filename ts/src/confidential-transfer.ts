@@ -43,6 +43,7 @@ import {
 import { assertV1Active } from './lib/feature';
 import { formatTransactionConfig } from './lib/rpc';
 import { createClients, sendAndConfirm } from './lib/send';
+import { decodeBase64Transaction } from './lib/v1';
 
 const STARTING_BALANCE = 10_000n;
 const TRANSFER_AMOUNT = 2_500n;
@@ -124,7 +125,7 @@ assertIsTransactionWithBlockhashLifetime(transaction);
 const signature = await sendAndConfirm(clients, transaction);
 
 const sent = await clients.rpc
-    .getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+    .getTransaction(signature, { commitment: 'confirmed', encoding: 'base64', maxSupportedTransactionVersion: 1 })
     .send();
 if (sent === null) {
     throw new Error('the transaction just sent was not found');
@@ -134,7 +135,7 @@ console.log('\n== sent ==');
 console.log(`  signature:       ${signature}`);
 console.log(`  version:         ${sent.version}`);
 console.log(`  compute units:   ${sent.meta?.computeUnitsConsumed} consumed`);
-console.log(formatTransactionConfig(sent.transaction.message.transactionConfig));
+console.log(formatTransactionConfig(decodeBase64Transaction(sent.transaction[0]).config));
 
 await applyPendingBalance(clients, payer, recipientParty);
 

@@ -2,9 +2,12 @@
 
 import {
     decompileTransactionMessage,
+    getBase64Encoder,
     getCompiledTransactionMessageDecoder,
+    getSignatureFromTransaction,
     getTransactionDecoder,
     type ReadonlyUint8Array,
+    type Signature,
     type TransactionMessage,
     type TransactionVersion,
     type V1TransactionConfig,
@@ -50,4 +53,20 @@ export function decodeTransactionVersion(wireTransaction: ReadonlyUint8Array): {
     return 'config' in message && message.config !== undefined
         ? { config: message.config, version: message.version }
         : { version: message.version };
+}
+
+/**
+ * Reads a transaction the RPC returned under `encoding: 'base64'`.
+ * @param encodedTransaction - The wire transaction as a base64-encoded string.
+ */
+export function decodeBase64Transaction(encodedTransaction: string): {
+    config?: V1TransactionConfig;
+    signature: Signature;
+    version: TransactionVersion;
+} {
+    const wireTransaction = getBase64Encoder().encode(encodedTransaction);
+    return {
+        ...decodeTransactionVersion(wireTransaction),
+        signature: getSignatureFromTransaction(getTransactionDecoder().decode(wireTransaction)),
+    };
 }
