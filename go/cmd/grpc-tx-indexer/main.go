@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/gagliardetto/solana-go"
+	"github.com/solana-foundation/solana-go/v2"
 
 	"github.com/solana-foundation/transaction-v1-examples/go/txv1"
 )

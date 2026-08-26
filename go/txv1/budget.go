@@ -9,8 +9,8 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/gagliardetto/solana-go"
-	computebudget "github.com/gagliardetto/solana-go/programs/compute-budget"
+	"github.com/solana-foundation/solana-go/v2"
+	computebudget "github.com/solana-foundation/solana-go/v2/programs/compute-budget"
 
 	"github.com/solana-foundation/transaction-v1-examples/go/pb"
 )
