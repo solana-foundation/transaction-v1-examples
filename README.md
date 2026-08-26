@@ -140,16 +140,18 @@ The priority fee is the one that does not port, for the same reason it complicat
 | Token-2022 program | `program@v11.0.0` | a build with `zk-ops` enabled — see above |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
-| Go | 1.24 | the toolchain `solana-go` itself requires |
-| `solana-go` | unreleased | **see below** — v1 lives in [solana-go#481](https://github.com/solana-foundation/solana-go/pull/481), still open |
+| Go | 1.25 | the toolchain the `grpc-go` and `golang.org/x` dependencies require |
+| `solana-go` | 2.0.0 | first stable release on the `github.com/solana-foundation/solana-go/v2` module path; carries the v1 transaction format from [solana-go#481](https://github.com/solana-foundation/solana-go/pull/481), released in v1.23.0 |
 
 ### These examples pin `yellowstone-grpc-proto` directly
 
 `yellowstone-grpc-client` 13.3.0 only requires `yellowstone-grpc-proto = "12.5.0"`, and 12.5.0 has no field 7 — so on a lockfile written before 2026-08-13 the resolver picks a proto crate that drops every v1 config without erroring. [`rust/Cargo.toml`](rust/Cargo.toml) pins 12.6.0 directly so that cannot happen, and CI runs `--locked` so a resolution change fails the build rather than drifting.
 
-### These examples pin an unmerged `solana-go` branch
+### These examples use the v2 `solana-go` module path
 
-SIMD-0385 support is not in any `solana-go` release: it is [PR #481](https://github.com/solana-foundation/solana-go/pull/481), which adds `solana.TransactionConfig`, `solana.MessageVersionV1`, and the `solana.TransactionV1Config` build option. [`go/go.mod`](go/go.mod) therefore carries a `replace` onto the PR branch, pinned by commit. When the PR merges, the `replace` comes out and the `require` moves to the release that carries it.
+SIMD-0385 support landed in [PR #481](https://github.com/solana-foundation/solana-go/pull/481), which adds `solana.TransactionConfig`, `solana.MessageVersionV1`, and the `solana.TransactionV1Config` build option. It shipped in `solana-go` v1.23.0 and in v2.0.0.
+
+The Go examples import `github.com/solana-foundation/solana-go/v2`. v2 moved the module path off `github.com/gagliardetto/solana-go` and reworked `rpc/ws` and the loader-program packages, none of which these examples use — the same code builds against the v1 line with only the import path changed.
 
 ## Configuration
 
