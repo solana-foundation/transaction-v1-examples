@@ -2,11 +2,14 @@
  * Reading a transaction's compute budget regardless of its version.
  *
  * Legacy and v0 state their budget in ComputeBudget program instructions, v1
- * in the message config. `computeBudgetOfMessage` reads both.
+ * in the message config. `computeBudgetOfMessage` reads both from a message
+ * that arrived over gRPC, and `computeBudgetOfBase64Transaction` from a signed
+ * transaction handed over as base64 — what an RPC response, a facilitator
+ * request body, or a wallet's `signTransaction` output carries.
  *
  * Kit's own `getTransactionMessageComputeUnitLimit` does this for messages kit
- * built itself; this module is the equivalent for one that arrived over gRPC,
- * where the instructions are still compiled.
+ * built itself; this module is the equivalent for one that arrived already
+ * compiled.
  */
 
 import {
@@ -19,7 +22,16 @@ import {
     identifyComputeBudgetInstruction,
     MAX_COMPUTE_UNIT_LIMIT,
 } from '@solana-program/compute-budget';
-import { getAddressDecoder, type V1TransactionConfig } from '@solana/kit';
+import {
+    decompileTransactionMessage,
+    getAddressDecoder,
+    getBase64Encoder,
+    getCompiledTransactionMessageDecoder,
+    getTransactionDecoder,
+    type ReadonlyUint8Array,
+    type TransactionVersion,
+    type V1TransactionConfig,
+} from '@solana/kit';
 
 import { type GrpcMessage, messageVersion } from './grpc';
 
@@ -88,14 +100,69 @@ export function computeBudgetOfMessage(message: GrpcMessage): ComputeBudget {
         };
     }
 
+    const computeBudgetData = message.instructions
+        .filter(instruction => isComputeBudgetProgram(message.accountKeys[instruction.programIdIndex]))
+        .map(instruction => instruction.data);
+
+    return computeBudgetOfInstructionData(computeBudgetData, message.instructions.length);
+}
+
+/**
+ * Reads the compute budget out of a signed transaction encoded as base64.
+ *
+ * @param base64EncodedTransaction - A signed transaction as it goes on the wire, base64-encoded.
+ */
+export function computeBudgetOfBase64Transaction(base64EncodedTransaction: string): {
+    budget: ComputeBudget;
+    version: TransactionVersion;
+} {
+    const wireTransaction = getBase64Encoder().encode(base64EncodedTransaction);
+    const transaction = getTransactionDecoder().decode(wireTransaction);
+    const compiled = getCompiledTransactionMessageDecoder().decode(transaction.messageBytes);
+    const version: TransactionVersion = compiled.version;
+
+    switch (compiled.version) {
+        case 1: {
+            const { config } = decompileTransactionMessage(compiled);
+            return { budget: { ...config }, version: 1 };
+        }
+        case 0:
+        case 'legacy': {
+            const computeBudgetData = compiled.instructions
+                .filter(
+                    instruction =>
+                        compiled.staticAccounts[instruction.programAddressIndex] === COMPUTE_BUDGET_PROGRAM_ADDRESS,
+                )
+                .map(instruction => instruction.data);
+            return {
+                budget: computeBudgetOfInstructionData(computeBudgetData, compiled.instructions.length),
+                version: compiled.version,
+            };
+        }
+        default: {
+            throw new Error(`cannot read a compute budget from transaction version ${String(version)}`);
+        }
+    }
+}
+
+/**
+ * Builds a budget out of the data of every ComputeBudget instruction in a
+ * legacy or v0 transaction.
+ * 
+ * @param computeBudgetData - The data of each ComputeBudget instruction, in the order the transaction lists them.
+ * @param instructionCount - How many instructions the transaction holds in total, ComputeBudget ones included.
+ */
+function computeBudgetOfInstructionData(
+    computeBudgetData: readonly (ReadonlyUint8Array | undefined)[],
+    instructionCount: number,
+): ComputeBudget {
     const budget: ComputeBudget = {};
     let priceMicroLamportsPerCu: bigint | undefined;
 
-    for (const instruction of message.instructions) {
-        if (!isComputeBudgetProgram(message.accountKeys[instruction.programIdIndex])) {
+    for (const data of computeBudgetData) {
+        if (data === undefined) {
             continue;
         }
-        const data = instruction.data;
         switch (identifyComputeBudgetInstruction(data)) {
             case ComputeBudgetInstruction.RequestHeapFrame:
                 budget.heapSize = getRequestHeapFrameInstructionDataDecoder().decode(data).bytes;
@@ -116,7 +183,7 @@ export function computeBudgetOfMessage(message: GrpcMessage): ComputeBudget {
     }
 
     if (priceMicroLamportsPerCu !== undefined) {
-        const limit = BigInt(budget.computeUnitLimit ?? defaultComputeUnitLimit(message.instructions.length));
+        const limit = BigInt(budget.computeUnitLimit ?? defaultComputeUnitLimit(instructionCount));
         // The runtime rounds the total up to whole lamports.
         const microLamports = limit * priceMicroLamportsPerCu;
         budget.priorityFeeLamports = (microLamports + 999_999n) / 1_000_000n;

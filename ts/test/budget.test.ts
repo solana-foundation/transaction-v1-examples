@@ -6,9 +6,29 @@ import {
     getSetComputeUnitPriceInstruction,
     getSetLoadedAccountsDataSizeLimitInstruction,
 } from '@solana-program/compute-budget';
+import { getTransferSolInstruction } from '@solana-program/system';
+import {
+    address,
+    appendTransactionMessageInstruction,
+    blockhash,
+    compileTransaction,
+    createNoopSigner,
+    createTransactionMessage,
+    getBase64EncodedWireTransaction,
+    lamports,
+    pipe,
+    setTransactionMessageComputeUnitLimit,
+    setTransactionMessageComputeUnitPrice,
+    setTransactionMessageConfig,
+    setTransactionMessageFeePayer,
+    setTransactionMessageLifetimeUsingBlockhash,
+    type TransactionMessage,
+    type TransactionMessageWithFeePayer,
+} from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
-import { computeBudgetOfMessage, defaultComputeUnitLimit } from '../src/lib/budget';
+import { computeBudgetOfBase64Transaction, computeBudgetOfMessage, defaultComputeUnitLimit } from '../src/lib/budget';
+import { EXAMPLE_CONFIG } from '../src/lib/v1';
 import { compileInstruction, computeBudgetMessage, grpcMessage } from './fixtures';
 
 describe('computeBudgetOfMessage', () => {
@@ -110,5 +130,108 @@ describe('computeBudgetOfMessage', () => {
         message.config = { computeUnitLimit: 20_000 };
 
         expect(computeBudgetOfMessage(message).computeUnitLimit).toBe(20_000);
+    });
+});
+
+const FEE_PAYER = address('4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T');
+const RECIPIENT = address('9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM');
+const LIFETIME = { blockhash: blockhash('11111111111111111111111111111111'), lastValidBlockHeight: 100n } as const;
+
+const TRANSFER = getTransferSolInstruction({
+    amount: lamports(1n),
+    destination: RECIPIENT,
+    source: createNoopSigner(FEE_PAYER),
+});
+
+function legacyMessage() {
+    return pipe(
+        createTransactionMessage({ version: 'legacy' }),
+        m => setTransactionMessageFeePayer(FEE_PAYER, m),
+        m => setTransactionMessageLifetimeUsingBlockhash(LIFETIME, m),
+        m => appendTransactionMessageInstruction(TRANSFER, m),
+    );
+}
+
+function v0Message() {
+    return pipe(
+        createTransactionMessage({ version: 0 }),
+        m => setTransactionMessageFeePayer(FEE_PAYER, m),
+        m => setTransactionMessageLifetimeUsingBlockhash(LIFETIME, m),
+        m => appendTransactionMessageInstruction(TRANSFER, m),
+    );
+}
+
+function v1Message() {
+    return pipe(
+        createTransactionMessage({ version: 1 }),
+        m => setTransactionMessageFeePayer(FEE_PAYER, m),
+        m => setTransactionMessageLifetimeUsingBlockhash(LIFETIME, m),
+        m => appendTransactionMessageInstruction(TRANSFER, m),
+    );
+}
+
+function toBase64(message: TransactionMessage & TransactionMessageWithFeePayer): string {
+    return getBase64EncodedWireTransaction(compileTransaction(message));
+}
+
+describe('computeBudgetOfBase64Transaction', () => {
+    it('should read a v1 budget off the config', () => {
+        const encoded = toBase64(setTransactionMessageConfig(EXAMPLE_CONFIG, v1Message()));
+
+        expect(computeBudgetOfBase64Transaction(encoded)).toStrictEqual({
+            budget: { ...EXAMPLE_CONFIG },
+            version: 1,
+        });
+    });
+
+    it("should recover an equivalent budget from a legacy transaction's ComputeBudget instructions", () => {
+        // 20,000 CU at 250,000 micro-lamports/CU is the 5,000 lamports the v1
+        // config states directly.
+        const encoded = toBase64(
+            pipe(
+                legacyMessage(),
+                m => setTransactionMessageComputeUnitLimit(EXAMPLE_CONFIG.computeUnitLimit, m),
+                m => setTransactionMessageComputeUnitPrice(250_000n, m),
+            ),
+        );
+
+        expect(computeBudgetOfBase64Transaction(encoded)).toStrictEqual({
+            budget: {
+                computeUnitLimit: EXAMPLE_CONFIG.computeUnitLimit,
+                priorityFeeLamports: EXAMPLE_CONFIG.priorityFeeLamports,
+            },
+            version: 'legacy',
+        });
+    });
+
+    it("should recover an equivalent budget from a v0 transaction's ComputeBudget instructions", () => {
+        const encoded = toBase64(
+            pipe(
+                v0Message(),
+                m => setTransactionMessageComputeUnitLimit(EXAMPLE_CONFIG.computeUnitLimit, m),
+                m => setTransactionMessageComputeUnitPrice(250_000n, m),
+            ),
+        );
+
+        expect(computeBudgetOfBase64Transaction(encoded)).toStrictEqual({
+            budget: {
+                computeUnitLimit: EXAMPLE_CONFIG.computeUnitLimit,
+                priorityFeeLamports: EXAMPLE_CONFIG.priorityFeeLamports,
+            },
+            version: 0,
+        });
+    });
+
+    it('should report nothing set for a transaction that states no budget', () => {
+        expect(computeBudgetOfBase64Transaction(toBase64(v0Message()))).toStrictEqual({ budget: {}, version: 0 });
+    });
+
+    it('should charge the implicit limit when a transaction prices units without limiting them', () => {
+        // Two instructions: the transfer and the price itself.
+        const encoded = toBase64(pipe(legacyMessage(), m => setTransactionMessageComputeUnitPrice(1_000_000n, m)));
+
+        expect(computeBudgetOfBase64Transaction(encoded).budget.priorityFeeLamports).toBe(
+            BigInt(defaultComputeUnitLimit(2)),
+        );
     });
 });

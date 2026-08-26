@@ -120,6 +120,10 @@ ts-send-decode:
 ts-estimate:
     cd ts && pnpm exec tsx src/estimate.ts
 
+# Read the compute budget out of a base64 transaction of any version. Needs no validator.
+ts-decode-budget base64="":
+    cd ts && pnpm exec tsx src/decode-budget.ts '{{ base64 }}'
+
 ts-confidential-transfer:
     cd ts && pnpm exec tsx src/confidential-transfer.ts
 
@@ -163,6 +167,7 @@ _demo-inner:
     just get-block
     just ts-send-decode
     just ts-estimate
+    just ts-decode-budget
     just ts-nonce
     just ts-get-block
     just ts-confidential-transfer

@@ -50,6 +50,7 @@ Each example prints the same facts in every language that has it, except where t
 | Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` | `just go-send-decode` |
 | Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` | `just go-get-block` |
 | Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — | — |
+| Read the compute budget out of a base64 transaction of any version | — | `just ts-decode-budget` | — | — |
 | Send a v1 transfer under a durable nonce lifetime | — | `just ts-nonce` | — | — |
 | Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
@@ -106,6 +107,8 @@ The fee is the fiddly part. v0 states a *price* in micro-lamports per compute un
 ```
 
 Both gRPC indexers print this normalised budget for every transaction they see, whatever its version.
+
+A consumer that never touches gRPC has the same problem one layer up: a facilitator, a relayer, or a simulation service is handed a base64 transaction and has to price it before it knows what version it is. [`just ts-decode-budget`](ts/src/decode-budget.ts) builds the same budget three ways and prints what comes back out of each; pass it a base64 transaction to read that one instead. It needs no validator.
 
 ## Setting a budget across versions
 
@@ -200,3 +203,9 @@ scripts/              validator, geyser plugin, Token-2022, and protobuf bootstr
 Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a single pnpm package, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
 
 Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
+
+
+## Additional Resources
+
+- [Transaction V1 - solana.com](https://solana.com/upgrades/larger-transaction-sizes)
+- [YouTube: SolAndy Transaction v1 Solana Tutorial - Aug 22nd '26](https://www.youtube.com/watch?v=BIvGszvDOtw)
