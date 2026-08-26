@@ -148,7 +148,7 @@ export function computeBudgetOfBase64Transaction(base64EncodedTransaction: strin
 /**
  * Builds a budget out of the data of every ComputeBudget instruction in a
  * legacy or v0 transaction.
- * 
+ *
  * @param computeBudgetData - The data of each ComputeBudget instruction, in the order the transaction lists them.
  * @param instructionCount - How many instructions the transaction holds in total, ComputeBudget ones included.
  */
