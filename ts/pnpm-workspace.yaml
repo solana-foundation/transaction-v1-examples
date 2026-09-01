@@ -1,0 +1,7 @@
+packages:
+  - kit
+  - web3js
+
+onlyBuiltDependencies:
+  - esbuild
+  - protobufjs

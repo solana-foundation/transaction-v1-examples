@@ -53,10 +53,13 @@ Each example prints the same facts in every language that has it, except where t
 | Read the compute budget out of a base64 transaction of any version | — | `just ts-decode-budget` | — | — |
 | Send a v1 transfer under a durable nonce lifetime | — | `just ts-nonce` | — | — |
 | Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
+| Read a v1 transaction with the `@solana/web3.js` 1.x beta | — | `just w3-read-transaction` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
 | Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
 
-Source: [`rust/src/bin/`](rust/src/bin), [`ts/src/`](ts/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
+Source: [`rust/src/bin/`](rust/src/bin), [`ts/kit/src/`](ts/kit/src), [`ts/web3js/src/`](ts/web3js/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
+
+Every TypeScript example uses `@solana/kit` except the last, which reads a v1 transaction with the `@solana/web3.js` 1.x beta. That beta deserializes v1 and exposes the transaction config, but `MessageV1.serialize` throws, so it can read v1 and not write it — [`ts/web3js/src/read-transaction.ts`](ts/web3js/src/read-transaction.ts) sends the transaction it reads with kit.
 
 Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
 
@@ -64,7 +67,7 @@ Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Ru
 
 v1 raises the transaction size limit from **1,232 bytes to 4,096**, enabling things like the ability to send a [Token-2022 confidential transfer](https://solana.com/docs/tokens/extensions/confidential-transfer) in a single transaction. A confidential transfer is three client-generated zero-knowledge proofs, each written into its own context state account, then the transfer instruction that reads all three, then three closes to reclaim the rent. `@solana-program/token-2022` hands that back as an `InstructionPlan` for a transaction planner to split, because under the legacy limit it cannot be one transaction.
 
-With v1, it all fits into a single transaction. [`just ts-confidential-transfer`](ts/src/confidential-transfer.ts) assembles the transfer, packs it into a single v1 message, and sends it as an atomic transaction.
+With v1, it all fits into a single transaction. [`just ts-confidential-transfer`](ts/kit/src/confidential-transfer.ts) assembles the transfer, packs it into a single v1 message, and sends it as an atomic transaction.
 
 
 ### The local validator needs a different Token-2022
@@ -97,7 +100,7 @@ Go has no release that carries the field at all. yellowstone-grpc ships its Go c
 
 ## Reading a budget that works for every version
 
-The examples above isolate v1, but a real indexer has to handle all three versions with one accessor. That is [`rust/src/budget.rs`](rust/src/budget.rs), [`ts/src/lib/budget.ts`](ts/src/lib/budget.ts), and [`go/txv1/budget.go`](go/txv1/budget.go): read `config` on v1, scan ComputeBudget instructions on legacy and v0, and normalise the priority fee so the two are comparable.
+The examples above isolate v1, but a real indexer has to handle all three versions with one accessor. That is [`rust/src/budget.rs`](rust/src/budget.rs), [`ts/kit/src/lib/budget.ts`](ts/kit/src/lib/budget.ts), and [`go/txv1/budget.go`](go/txv1/budget.go): read `config` on v1, scan ComputeBudget instructions on legacy and v0, and normalise the priority fee so the two are comparable.
 
 The fee is the fiddly part. v0 states a *price* in micro-lamports per compute unit; v1 states a *total* in lamports. Comparing them means multiplying the v0 price by the compute unit limit — including the implicit `min(200_000 × instructions, 1_400_000)` limit when the transaction never set one — and rounding up:
 
@@ -108,7 +111,7 @@ The fee is the fiddly part. v0 states a *price* in micro-lamports per compute un
 
 Both gRPC indexers print this normalised budget for every transaction they see, whatever its version.
 
-A consumer that never touches gRPC has the same problem one layer up: a facilitator, a relayer, or a simulation service is handed a base64 transaction and has to price it before it knows what version it is. [`just ts-decode-budget`](ts/src/decode-budget.ts) builds the same budget three ways and prints what comes back out of each; pass it a base64 transaction to read that one instead. It needs no validator.
+A consumer that never touches gRPC has the same problem one layer up: a facilitator, a relayer, or a simulation service is handed a base64 transaction and has to price it before it knows what version it is. [`just ts-decode-budget`](ts/kit/src/decode-budget.ts) builds the same budget three ways and prints what comes back out of each; pass it a base64 transaction to read that one instead. It needs no validator.
 
 ## Setting a budget across versions
 
@@ -125,7 +128,7 @@ Reading is one half; writing is the other, and kit's setters do not all accept t
 
 The priority fee is the one that does not port, for the same reason it complicates reading: micro-lamports per compute unit and a total in lamports are different quantities, so they get different setters and neither accepts the other's versions. Only the type system enforces this — call the wrong one and the runtime attaches a `config` to a v0 message or a ComputeBudget instruction to a v1 one.
 
-`setTransactionMessageConfig` merges into whatever config the message already holds, so `EXAMPLE_CONFIG` in [`ts/src/send-decode.ts`](ts/src/send-decode.ts) could equally be built up one field at a time; passing `undefined` for a field unsets it, and unsetting the last one removes `config` from the message altogether. [`ts/test/wire.test.ts`](ts/test/wire.test.ts) pins all of this down offline.
+`setTransactionMessageConfig` merges into whatever config the message already holds, so `EXAMPLE_CONFIG` in [`ts/kit/src/send-decode.ts`](ts/kit/src/send-decode.ts) could equally be built up one field at a time; passing `undefined` for a field unsets it, and unsetting the last one removes `config` from the message altogether. [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) pins all of this down offline.
 
 `solana-go` draws the line in the other place. `solana.TransactionV1Config(config)` both selects the v1 format and carries the whole budget, and its `With*` methods chain onto a zero `solana.TransactionConfig`, so there is one setter rather than six and no way to reach for the wrong one. What kit rejects at compile time, `solana.NewTransaction` rejects at runtime: passing a ComputeBudget instruction or an address lookup table alongside a v1 config is an error, not a silently ignored no-op. [`go/txv1/wire_test.go`](go/txv1/wire_test.go) pins the same wire-level facts down offline.
 
@@ -141,6 +144,7 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `@solana-program/token-2022` | 0.15.0 | the `confidential` entry point, its instruction-plan helpers, and `solana-conf-bal/v1` key derivation |
 | `@solana/zk-sdk` | 0.5.1 | the WASM proof generation the confidential helpers call |
 | Token-2022 program | `program@v11.0.0` | a build with `zk-ops` enabled — see above |
+| `@solana/web3.js` | 1.99.0-beta.0 | first 1.x prerelease with `MessageV1` and `maxSupportedTransactionVersion: 1`; it deserializes v1 but cannot serialize it |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
 | Go | 1.25 | the toolchain the `grpc-go` and `golang.org/x` dependencies require |
@@ -190,9 +194,11 @@ CI runs both jobs on every pull request. The live job downloads the prebuilt gey
 rust/src/bin/         Rust example binaries, one per example
 rust/src/             the Rust library they share
 rust/tests/           offline and live tests
-ts/src/               TypeScript example scripts, one per example
-ts/src/lib/           the modules they share
-ts/test/              offline and live tests
+ts/kit/src/           @solana/kit example scripts, one per example
+ts/kit/src/lib/       the modules they share
+ts/kit/test/          offline and live tests
+ts/kit-plugins/       reserved for @solana/kit plugin-client examples
+ts/web3js/src/        @solana/web3.js example scripts
 python/examples/      Python example scripts, one per example
 python/src/txv1/      the package they share
 python/tests/         offline and live tests
@@ -202,9 +208,9 @@ go/pb/                generated Yellowstone protobuf bindings
 scripts/              validator, geyser plugin, Token-2022, and protobuf bootstrap
 ```
 
-Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a single pnpm package, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
+Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a pnpm workspace with one package per client library, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
 
-Every language separates the runnable examples from the code they share. A file directly under `ts/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
+Every language separates the runnable examples from the code they share. A file directly under `ts/kit/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/kit/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
 
 
 ## Additional Resources

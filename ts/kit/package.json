@@ -1,0 +1,19 @@
+{
+    "name": "txv1-examples-kit",
+    "version": "0.1.0",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "test": "vitest run test/wire.test.ts test/budget.test.ts",
+        "test:live": "vitest run"
+    },
+    "dependencies": {
+        "@solana-program/compute-budget": "^0.17.0",
+        "@solana-program/system": "^0.13.0",
+        "@solana-program/token-2022": "^0.15.0",
+        "@solana/kit": "^8.0.0",
+        "@solana/zk-sdk": "^0.5.1",
+        "@triton-one/yellowstone-grpc": "6.0.0"
+    }
+}
