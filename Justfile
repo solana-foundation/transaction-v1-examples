@@ -64,7 +64,7 @@ lint: _py-install
     cd go && go vet ./...
 
 typecheck: _py-install
-    cd ts && pnpm exec tsc -p kit/tsconfig.json --noEmit && pnpm exec tsc -p web3js/tsconfig.json --noEmit
+    cd ts && pnpm exec tsc -p kit/tsconfig.json --noEmit && pnpm exec tsc -p kit-plugins/tsconfig.json --noEmit && pnpm exec tsc -p web3js/tsconfig.json --noEmit
     cd python && .venv/bin/mypy
     cd go && go build ./...
 
@@ -139,6 +139,10 @@ ts-grpc-tx-indexer:
 ts-grpc-block-indexer:
     cd ts/kit && pnpm exec tsx src/grpc-block-indexer.ts
 
+# Send and read a v1 transfer through a @solana/kit plugin client.
+kp-send-decode:
+    cd ts/kit-plugins && pnpm exec tsx src/send-decode.ts
+
 # Read a v1 transaction back over JSON-RPC with @solana/web3.js. Pass a signature to read an existing one.
 w3-read-transaction signature="":
     cd ts/web3js && pnpm exec tsx src/read-transaction.ts {{ signature }}
@@ -175,6 +179,7 @@ _demo-inner:
     just ts-nonce
     just ts-get-block
     just ts-confidential-transfer
+    just kp-send-decode
     just w3-read-transaction
     just py-send-decode
     just py-get-block

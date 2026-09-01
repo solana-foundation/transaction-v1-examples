@@ -53,13 +53,14 @@ Each example prints the same facts in every language that has it, except where t
 | Read the compute budget out of a base64 transaction of any version | — | `just ts-decode-budget` | — | — |
 | Send a v1 transfer under a durable nonce lifetime | — | `just ts-nonce` | — | — |
 | Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
+| Send and read a v1 transfer through a `@solana/kit` plugin client | — | `just kp-send-decode` | — | — |
 | Read a v1 transaction with the `@solana/web3.js` 1.x beta | — | `just w3-read-transaction` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
 | Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
 
-Source: [`rust/src/bin/`](rust/src/bin), [`ts/kit/src/`](ts/kit/src), [`ts/web3js/src/`](ts/web3js/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
+Source: [`rust/src/bin/`](rust/src/bin), [`ts/kit/src/`](ts/kit/src), [`ts/kit-plugins/src/`](ts/kit-plugins/src), [`ts/web3js/src/`](ts/web3js/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
 
-Every TypeScript example uses `@solana/kit` except the last, which reads a v1 transaction with the `@solana/web3.js` 1.x beta. That beta deserializes v1 and exposes the transaction config, but `MessageV1.serialize` throws, so it can read v1 and not write it — [`ts/web3js/src/read-transaction.ts`](ts/web3js/src/read-transaction.ts) sends the transaction it reads with kit.
+Every TypeScript example uses `@solana/kit` except the last two. [`ts/kit-plugins/src/send-decode.ts`](ts/kit-plugins/src/send-decode.ts) builds the same v1 transfer on the `@solana/kit` plugin clients instead of the `pipe`-based message builders, where the version is set once in `transactionConfig` when the client is assembled and the compute unit limit and loaded accounts data size limit are estimated by simulation rather than hard-coded — see [`ts/kit-plugins/README.md`](ts/kit-plugins/README.md). The last reads a v1 transaction with the `@solana/web3.js` 1.x beta. That beta deserializes v1 and exposes the transaction config, but `MessageV1.serialize` throws, so it can read v1 and not write it — [`ts/web3js/src/read-transaction.ts`](ts/web3js/src/read-transaction.ts) sends the transaction it reads with kit.
 
 Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
 
@@ -144,6 +145,8 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `@solana-program/token-2022` | 0.15.0 | the `confidential` entry point, its instruction-plan helpers, and `solana-conf-bal/v1` key derivation |
 | `@solana/zk-sdk` | 0.5.1 | the WASM proof generation the confidential helpers call |
 | Token-2022 program | `program@v11.0.0` | a build with `zk-ops` enabled — see above |
+| `@solana/kit-plugin-rpc` | 0.19.0 | first release whose transaction planner takes `version: 1`, splitting `TransactionPlannerConfig` into a legacy/v0 arm keyed by `microLamportsPerComputeUnit` and a v1 arm keyed by `priorityFeeLamports`, and estimating the v1 loaded accounts data size limit alongside the compute unit limit |
+| `@solana/kit-plugin-signer` | 0.19.0 | the release `@solana/kit-plugin-rpc` 0.19.0 is published alongside; supersedes the deprecated `@solana/kit-plugin-payer` and `@solana/kit-plugin-airdrop` |
 | `@solana/web3.js` | 1.99.0-beta.0 | first 1.x prerelease with `MessageV1` and `maxSupportedTransactionVersion: 1`; it deserializes v1 but cannot serialize it |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
@@ -197,7 +200,7 @@ rust/tests/           offline and live tests
 ts/kit/src/           @solana/kit example scripts, one per example
 ts/kit/src/lib/       the modules they share
 ts/kit/test/          offline and live tests
-ts/kit-plugins/       reserved for @solana/kit plugin-client examples
+ts/kit-plugins/src/   @solana/kit plugin-client example scripts
 ts/web3js/src/        @solana/web3.js example scripts
 python/examples/      Python example scripts, one per example
 python/src/txv1/      the package they share
