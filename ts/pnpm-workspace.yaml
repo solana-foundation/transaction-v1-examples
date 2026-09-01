@@ -1,5 +1,6 @@
 packages:
   - kit
+  - kit-plugins
   - web3js
 
 onlyBuiltDependencies:
