@@ -2,21 +2,16 @@
  * Confidential transfer (Token-2022) scaffolding, driven by a plugin client.
  *
  * This is the `ts/kit/src/lib/confidential.ts` setup with the hand-rolled
- * transaction planner and executor removed. Every setup step here hands its
- * {@link InstructionPlan} straight to `client.sendTransactions`, which plans it
- * into as few v1 messages as the size limit allows, estimates each one's
- * resource limits, signs, sends, and confirms.
+ * transaction planner and executor removed. Each step reaches for a builder on
+ * `client.token2022` and sends it in one call, so nothing here threads a payer,
+ * a rent lookup, a planner, or an executor through by hand.
+ *
+ * The confidential pieces have no program plugin of their own: key derivation,
+ * proof generation, and balance decryption still come from the
+ * `@solana-program/token-2022/confidential` helpers.
  */
 
-import {
-    extension,
-    fetchToken,
-    findAssociatedTokenPda,
-    getConfidentialDepositInstruction,
-    getCreateMintInstructionPlan,
-    getMintToATAInstructionPlanAsync,
-    TOKEN_2022_PROGRAM_ADDRESS,
-} from '@solana-program/token-2022';
+import { extension, findAssociatedTokenPda, TOKEN_2022_PROGRAM_ADDRESS } from '@solana-program/token-2022';
 import {
     deriveAeKeyForOwnerMint,
     deriveElGamalKeypairForOwnerMint,
@@ -24,13 +19,7 @@ import {
     getApplyConfidentialPendingBalanceInstructionFromToken,
     getCreateConfidentialTransferAccountInstructionPlan,
 } from '@solana-program/token-2022/confidential';
-import {
-    type Address,
-    generateKeyPairSigner,
-    type MessagePartialSigner,
-    singleInstructionPlan,
-    type TransactionSigner,
-} from '@solana/kit';
+import { type Address, generateKeyPairSigner, type MessagePartialSigner, type TransactionSigner } from '@solana/kit';
 import { AeKey, ElGamalKeypair, ElGamalSecretKey } from '@solana/zk-sdk/bundler';
 
 import type { V1Client } from './client';
@@ -71,8 +60,8 @@ async function deriveConfidentialKeys(owner: ConfidentialSigner, mint: Address):
 
 export async function createConfidentialMint(client: V1Client): Promise<Address> {
     const mint = await generateKeyPairSigner();
-    await client.sendTransactions(
-        await getCreateMintInstructionPlan(client, {
+    await client.token2022.instructions
+        .createMint({
             decimals: MINT_DECIMALS,
             extensions: [
                 extension('ConfidentialTransferMint', {
@@ -83,9 +72,8 @@ export async function createConfidentialMint(client: V1Client): Promise<Address>
             ],
             mintAuthority: client.payer,
             newMint: mint,
-            payer: client.payer,
-        }),
-    );
+        })
+        .sendTransactions();
     return mint.address;
 }
 
@@ -114,17 +102,15 @@ export async function createConfidentialParty(
 }
 
 export async function applyPendingBalance(client: V1Client, party: ConfidentialParty): Promise<void> {
-    const account = await fetchToken(client.rpc, party.token);
-    await client.sendTransactions(
-        singleInstructionPlan(
-            getApplyConfidentialPendingBalanceInstructionFromToken({
-                aesKey: party.aesKey,
-                authority: party.owner,
-                elgamalSecretKey: party.elgamalKeypair.secret(),
-                token: party.token,
-                tokenAccount: account.data,
-            }),
-        ),
+    const account = await client.token2022.accounts.token.fetch(party.token);
+    await client.sendTransaction(
+        getApplyConfidentialPendingBalanceInstructionFromToken({
+            aesKey: party.aesKey,
+            authority: party.owner,
+            elgamalSecretKey: party.elgamalKeypair.secret(),
+            token: party.token,
+            tokenAccount: account.data,
+        }),
     );
 }
 
@@ -142,26 +128,23 @@ export async function fundConfidentially(
     party: ConfidentialParty,
     amount: bigint,
 ): Promise<void> {
-    await client.sendTransactions(
-        await getMintToATAInstructionPlanAsync({
+    await client.token2022.instructions
+        .mintToATA({
             amount,
             decimals: MINT_DECIMALS,
             mint,
             mintAuthority: client.payer,
             owner: party.owner.address,
-            payer: client.payer,
-        }),
-    );
-    await client.sendTransactions(
-        singleInstructionPlan(
-            getConfidentialDepositInstruction({
-                amount,
-                authority: party.owner,
-                decimals: MINT_DECIMALS,
-                mint,
-                token: party.token,
-            }),
-        ),
-    );
+        })
+        .sendTransactions();
+    await client.token2022.instructions
+        .confidentialDeposit({
+            amount,
+            authority: party.owner,
+            decimals: MINT_DECIMALS,
+            mint,
+            token: party.token,
+        })
+        .sendTransaction();
     await applyPendingBalance(client, party);
 }

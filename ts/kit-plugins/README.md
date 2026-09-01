@@ -23,9 +23,27 @@ const client = await createClient()
 const { context } = await client.sendTransaction([instruction]);
 ```
 
+`systemProgram` and `token2022Program` are program plugins, which hang a typed
+instruction builder and account fetcher for their program off the client. Every
+builder they add can plan and send itself, so the fee payer, the rent lookup, the
+planner and the executor are all implicit:
+
+```ts
+await client.token2022.instructions
+    .mintToATA({ amount, decimals, mint, mintAuthority: client.payer, owner })
+    .sendTransactions();
+
+const account = await client.token2022.accounts.token.fetch(token);
+```
+
 Plugin order matters. `solanaLocalRpc` builds its transaction planner around a
 payer, so a signer plugin has to come first; `airdropSigner` calls the `airdrop`
-that `solanaLocalRpc` installs, so it has to come after.
+that `solanaLocalRpc` installs, so it has to come after; and the two program
+plugins go last because they need the planning and sending `solanaLocalRpc` adds.
+
+There is no confidential-transfer program plugin. Key derivation, proof
+generation, and balance decryption still come from the plain
+`@solana-program/token-2022/confidential` helpers.
 
 `transactionConfig` is a discriminated union on `version`. Under `version: 1` it
 takes `priorityFeeLamports` — a total in lamports written into the message
@@ -73,6 +91,9 @@ already do all of that:
 ```ts
 await client.sendTransactions(plan);
 ```
+
+That is 274 lines of setup in `ts/kit` against 155 here, and none of the
+difference is the confidential transfer itself.
 
 The transfer itself uses `sendTransaction` rather than `sendTransactions`, which
 is what asserts the whole thing is atomic: it plans a _single_ transaction and

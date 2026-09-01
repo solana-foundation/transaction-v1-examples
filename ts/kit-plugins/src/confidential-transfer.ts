@@ -13,7 +13,6 @@
  * More on Confidential Transfers: https://solana.com/docs/tokens/extensions/confidential-transfer
  */
 
-import { fetchMint, fetchToken } from '@solana-program/token-2022';
 import { getConfidentialTransferInstructionPlan } from '@solana-program/token-2022/confidential';
 import { generateKeyPairSigner, getTransactionMessageSize, getTransactionMessageSizeLimit } from '@solana/kit';
 
@@ -50,9 +49,9 @@ console.log(`  recipient token:   ${recipientParty.token}`);
 console.log(`  sender available:  ${units((await fetchPartyBalance(client, senderParty)).availableBalance)}`);
 
 const [mintAccount, sourceAccount, destinationAccount] = await Promise.all([
-    fetchMint(client.rpc, mint),
-    fetchToken(client.rpc, senderParty.token),
-    fetchToken(client.rpc, recipientParty.token),
+    client.token2022.accounts.mint.fetch(mint),
+    client.token2022.accounts.token.fetch(senderParty.token),
+    client.token2022.accounts.token.fetch(recipientParty.token),
 ]);
 const transferPlan = await getConfidentialTransferInstructionPlan({
     aesKey: senderParty.aesKey,
