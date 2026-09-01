@@ -64,7 +64,7 @@ lint: _py-install
     cd go && go vet ./...
 
 typecheck: _py-install
-    cd ts && pnpm exec tsc -p tsconfig.json --noEmit
+    cd ts && pnpm exec tsc -p kit/tsconfig.json --noEmit && pnpm exec tsc -p web3js/tsconfig.json --noEmit
     cd python && .venv/bin/mypy
     cd go && go build ./...
 
@@ -73,7 +73,7 @@ typecheck: _py-install
 # Offline tests only — no validator required.
 test: _py-install
     cd rust && cargo test --locked
-    cd ts && pnpm exec vitest run test/wire.test.ts test/budget.test.ts
+    cd ts/kit && pnpm exec vitest run test/wire.test.ts test/budget.test.ts
     cd python && .venv/bin/pytest
     cd go && go test ./...
 
@@ -85,7 +85,7 @@ test-live: _py-install
 
 _test-live-inner:
     cd rust && cargo test --locked -- --include-ignored --test-threads=1
-    cd ts && TXV1_LIVE=1 pnpm exec vitest run
+    cd ts/kit && TXV1_LIVE=1 pnpm exec vitest run
     cd python && .venv/bin/pytest -m live
     cd go && TXV1_LIVE=1 go test ./... -p 1
 
@@ -115,29 +115,33 @@ grpc-block-indexer:
     cd rust && cargo run --bin grpc-block-indexer
 
 ts-send-decode:
-    cd ts && pnpm exec tsx src/send-decode.ts
+    cd ts/kit && pnpm exec tsx src/send-decode.ts
 
 ts-estimate:
-    cd ts && pnpm exec tsx src/estimate.ts
+    cd ts/kit && pnpm exec tsx src/estimate.ts
 
 # Read the compute budget out of a base64 transaction of any version. Needs no validator.
 ts-decode-budget base64="":
-    cd ts && pnpm exec tsx src/decode-budget.ts '{{ base64 }}'
+    cd ts/kit && pnpm exec tsx src/decode-budget.ts '{{ base64 }}'
 
 ts-confidential-transfer:
-    cd ts && pnpm exec tsx src/confidential-transfer.ts
+    cd ts/kit && pnpm exec tsx src/confidential-transfer.ts
 
 ts-nonce:
-    cd ts && pnpm exec tsx src/nonce.ts
+    cd ts/kit && pnpm exec tsx src/nonce.ts
 
 ts-get-block slot="":
-    cd ts && pnpm exec tsx src/get-block.ts {{ slot }}
+    cd ts/kit && pnpm exec tsx src/get-block.ts {{ slot }}
 
 ts-grpc-tx-indexer:
-    cd ts && pnpm exec tsx src/grpc-tx-indexer.ts
+    cd ts/kit && pnpm exec tsx src/grpc-tx-indexer.ts
 
 ts-grpc-block-indexer:
-    cd ts && pnpm exec tsx src/grpc-block-indexer.ts
+    cd ts/kit && pnpm exec tsx src/grpc-block-indexer.ts
+
+# Read a v1 transaction back over JSON-RPC with @solana/web3.js. Pass a signature to read an existing one.
+w3-read-transaction signature="":
+    cd ts/web3js && pnpm exec tsx src/read-transaction.ts {{ signature }}
 
 py-send-decode: _py-install
     cd python && .venv/bin/python examples/send_decode.py
@@ -171,6 +175,7 @@ _demo-inner:
     just ts-nonce
     just ts-get-block
     just ts-confidential-transfer
+    just w3-read-transaction
     just py-send-decode
     just py-get-block
     just go-send-decode

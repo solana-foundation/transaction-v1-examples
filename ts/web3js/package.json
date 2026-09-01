@@ -1,0 +1,12 @@
+{
+    "name": "txv1-examples-web3js",
+    "version": "0.1.0",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "dependencies": {
+        "@solana-program/system": "^0.13.0",
+        "@solana/kit": "^8.0.0",
+        "@solana/web3.js": "1.99.0-beta.0"
+    }
+}
