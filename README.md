@@ -54,13 +54,14 @@ Each example prints the same facts in every language that has it, except where t
 | Send a v1 transfer under a durable nonce lifetime | — | `just ts-nonce` | — | — |
 | Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
 | Send and read a v1 transfer through a `@solana/kit` plugin client | — | `just kp-send-decode` | — | — |
+| Send a confidential transfer through a `@solana/kit` plugin client | — | `just kp-confidential-transfer` | — | — |
 | Read a v1 transaction with the `@solana/web3.js` 1.x beta | — | `just w3-read-transaction` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
 | Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
 
 Source: [`rust/src/bin/`](rust/src/bin), [`ts/kit/src/`](ts/kit/src), [`ts/kit-plugins/src/`](ts/kit-plugins/src), [`ts/web3js/src/`](ts/web3js/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
 
-Every TypeScript example uses `@solana/kit` except the last two. [`ts/kit-plugins/src/send-decode.ts`](ts/kit-plugins/src/send-decode.ts) builds the same v1 transfer on the `@solana/kit` plugin clients instead of the `pipe`-based message builders, where the version is set once in `transactionConfig` when the client is assembled and the compute unit limit and loaded accounts data size limit are estimated by simulation rather than hard-coded — see [`ts/kit-plugins/README.md`](ts/kit-plugins/README.md). The last reads a v1 transaction with the `@solana/web3.js` 1.x beta. That beta deserializes v1 and exposes the transaction config, but `MessageV1.serialize` throws, so it can read v1 and not write it — [`ts/web3js/src/read-transaction.ts`](ts/web3js/src/read-transaction.ts) sends the transaction it reads with kit.
+Every TypeScript example uses `@solana/kit` except the last two. [`ts/kit-plugins/`](ts/kit-plugins) rebuilds two of them on the `@solana/kit` plugin clients instead of the `pipe`-based message builders, so the pairs can be read side by side: the version is set once in `transactionConfig` when the client is assembled, and the compute unit limit and loaded accounts data size limit are estimated by simulation rather than hard-coded. The confidential transfer is the sharper comparison — `client.sendTransactions(plan)` replaces the hand-rolled transaction planner and executor in [`ts/kit/src/lib/confidential.ts`](ts/kit/src/lib/confidential.ts). See [`ts/kit-plugins/README.md`](ts/kit-plugins/README.md). The last reads a v1 transaction with the `@solana/web3.js` 1.x beta. That beta deserializes v1 and exposes the transaction config, but `MessageV1.serialize` throws, so it can read v1 and not write it — [`ts/web3js/src/read-transaction.ts`](ts/web3js/src/read-transaction.ts) sends the transaction it reads with kit.
 
 Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
 
@@ -68,7 +69,7 @@ Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Ru
 
 v1 raises the transaction size limit from **1,232 bytes to 4,096**, enabling things like the ability to send a [Token-2022 confidential transfer](https://solana.com/docs/tokens/extensions/confidential-transfer) in a single transaction. A confidential transfer is three client-generated zero-knowledge proofs, each written into its own context state account, then the transfer instruction that reads all three, then three closes to reclaim the rent. `@solana-program/token-2022` hands that back as an `InstructionPlan` for a transaction planner to split, because under the legacy limit it cannot be one transaction.
 
-With v1, it all fits into a single transaction. [`just ts-confidential-transfer`](ts/kit/src/confidential-transfer.ts) assembles the transfer, packs it into a single v1 message, and sends it as an atomic transaction.
+With v1, it all fits into a single transaction. [`just ts-confidential-transfer`](ts/kit/src/confidential-transfer.ts) assembles the transfer, packs it into a single v1 message, and sends it as an atomic transaction — ten instructions and 2,897 of the 4,096 bytes. [`just kp-confidential-transfer`](ts/kit-plugins/src/confidential-transfer.ts) does the same thing on a plugin client, where `sendTransaction` is what asserts the plan fits in one transaction.
 
 
 ### The local validator needs a different Token-2022
@@ -200,7 +201,7 @@ rust/tests/           offline and live tests
 ts/kit/src/           @solana/kit example scripts, one per example
 ts/kit/src/lib/       the modules they share
 ts/kit/test/          offline and live tests
-ts/kit-plugins/src/   @solana/kit plugin-client example scripts
+ts/kit-plugins/src/   @solana/kit plugin-client example scripts, plus the lib/ they share
 ts/web3js/src/        @solana/web3.js example scripts
 python/examples/      Python example scripts, one per example
 python/src/txv1/      the package they share
@@ -213,7 +214,7 @@ scripts/              validator, geyser plugin, Token-2022, and protobuf bootstr
 
 Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a pnpm workspace with one package per client library, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
 
-Every language separates the runnable examples from the code they share. A file directly under `ts/kit/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/kit/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
+Every language separates the runnable examples from the code they share. A file directly under `ts/kit/src/` or `ts/kit-plugins/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/kit/src/lib/` and `ts/kit-plugins/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
 
 
 ## Additional Resources

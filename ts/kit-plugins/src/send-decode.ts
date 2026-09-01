@@ -6,47 +6,12 @@
  */
 
 import { getTransferSolInstruction } from '@solana-program/system';
-import {
-    createClient,
-    decompileTransactionMessage,
-    generateKeyPairSigner,
-    getBase64Encoder,
-    getCompiledTransactionMessageDecoder,
-    getTransactionDecoder,
-    lamports,
-    type ReadonlyUint8Array,
-    type TransactionVersion,
-    type V1TransactionConfig,
-} from '@solana/kit';
-import { solanaLocalRpc } from '@solana/kit-plugin-rpc';
-import { airdropSigner, generatedSigner } from '@solana/kit-plugin-signer';
+import { generateKeyPairSigner, lamports } from '@solana/kit';
 
-const RPC_URL = process.env.TXV1_RPC_URL ?? 'http://127.0.0.1:8899';
-const RPC_SUBSCRIPTIONS_URL = process.env.TXV1_RPC_SUBSCRIPTIONS_URL ?? 'ws://127.0.0.1:8900';
+import { createV1Client } from './lib/client';
+import { decodeBase64Transaction, json } from './lib/v1';
 
-const json = (value: unknown) => JSON.stringify(value, (_, entry) => (typeof entry === 'bigint' ? `${entry}` : entry));
-
-function decodeVersionAndConfig(wireTransaction: ReadonlyUint8Array): {
-    config?: V1TransactionConfig;
-    version: TransactionVersion;
-} {
-    const { messageBytes } = getTransactionDecoder().decode(wireTransaction);
-    const message = decompileTransactionMessage(getCompiledTransactionMessageDecoder().decode(messageBytes));
-    return 'config' in message && message.config !== undefined
-        ? { config: message.config, version: message.version }
-        : { version: message.version };
-}
-
-const client = await createClient()
-    .use(generatedSigner())
-    .use(
-        solanaLocalRpc({
-            rpcSubscriptionsUrl: RPC_SUBSCRIPTIONS_URL,
-            rpcUrl: RPC_URL,
-            transactionConfig: { priorityFeeLamports: lamports(5_000n), version: 1 },
-        }),
-    )
-    .use(airdropSigner(lamports(1_000_000_000n)));
+const client = await createV1Client(1_000_000_000n);
 
 const recipient = await generateKeyPairSigner();
 const instruction = getTransferSolInstruction({
@@ -82,7 +47,7 @@ if (fetched === null) {
     throw new Error('the transaction just sent was not found');
 }
 
-const remote = decodeVersionAndConfig(getBase64Encoder().encode(fetched.transaction[0]));
+const remote = decodeBase64Transaction(fetched.transaction[0]);
 console.log('\n== decoded from the base64 wire bytes ==');
 console.log(`  version: ${remote.version} (${fetched.version} in the response envelope)`);
 console.log(`  config:  ${json(remote.config)}`);

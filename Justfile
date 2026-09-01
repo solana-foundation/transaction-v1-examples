@@ -143,6 +143,10 @@ ts-grpc-block-indexer:
 kp-send-decode:
     cd ts/kit-plugins && pnpm exec tsx src/send-decode.ts
 
+# Send a whole Token-2022 confidential transfer through a @solana/kit plugin client.
+kp-confidential-transfer:
+    cd ts/kit-plugins && pnpm exec tsx src/confidential-transfer.ts
+
 # Read a v1 transaction back over JSON-RPC with @solana/web3.js. Pass a signature to read an existing one.
 w3-read-transaction signature="":
     cd ts/web3js && pnpm exec tsx src/read-transaction.ts {{ signature }}
@@ -180,6 +184,7 @@ _demo-inner:
     just ts-get-block
     just ts-confidential-transfer
     just kp-send-decode
+    just kp-confidential-transfer
     just w3-read-transaction
     just py-send-decode
     just py-get-block
