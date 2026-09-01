@@ -92,7 +92,7 @@ already do all of that:
 await client.sendTransactions(plan);
 ```
 
-That is 274 lines of setup in `ts/kit` against 155 here, and none of the
+That is 274 lines of setup in `ts/kit` against 150 here, and none of the
 difference is the confidential transfer itself.
 
 The transfer itself uses `sendTransaction` rather than `sendTransactions`, which
