@@ -14,11 +14,23 @@ import {
     getApplyConfidentialPendingBalanceInstructionFromToken,
     getCreateConfidentialTransferAccountInstructionPlan,
 } from '@solana-program/token-2022/confidential';
-import { type Address, createSolanaRpc, generateKeyPairSigner } from '@solana/kit';
+import {
+    type Address,
+    createSolanaRpc,
+    flattenInstructionPlan,
+    getSignersFromInstruction,
+    type Instruction,
+    type InstructionPlan,
+    type InstructionPlanInput,
+    isMessagePartialSigner,
+    isSingleInstructionPlan,
+    type MessagePartialSigner,
+    parseInstructionPlanInput,
+} from '@solana/kit';
 import { Connection, Keypair } from '@solana/web3.js';
 import { AeKey, ElGamalKeypair, ElGamalSecretKey } from '@solana/zk-sdk/bundler';
 
-import { fundedKeypair, RPC_URL, sendV1Transaction, type V1InstructionInput } from './v1';
+import { fundedKeypair, RPC_URL, sendV1Transaction } from './v1';
 
 export const MINT_DECIMALS = 2;
 
@@ -43,8 +55,30 @@ export async function createConfidentialContext(airdrop: number): Promise<Confid
     return { connection, payer: await fundedKeypair(connection, airdrop), rpc: createSolanaRpc(RPC_URL) };
 }
 
-const send = (context: ConfidentialContext, inputs: ReadonlyArray<V1InstructionInput>) =>
-    sendV1Transaction(context.connection, context.payer, inputs);
+/**
+ * Collects the signers that token-2022 instructions carry on their accounts.
+ * Confidential transfers generate ephemeral proof-context keypairs internally,
+ * so their signers are only reachable through the instructions themselves.
+ */
+function instructionSigners(input: InstructionPlanInput): MessagePartialSigner[] {
+    const signers = new Map<string, MessagePartialSigner>();
+    for (const leaf of flattenInstructionPlan(parseInstructionPlanInput(input))) {
+        if (!isSingleInstructionPlan(leaf)) {
+            continue;
+        }
+        for (const signer of getSignersFromInstruction(leaf.instruction)) {
+            if (isMessagePartialSigner(signer)) {
+                signers.set(signer.address, signer);
+            }
+        }
+    }
+    return [...signers.values()];
+}
+
+/** Sends one instruction or instruction plan as a single v1 transaction. */
+export function send(context: ConfidentialContext, input: Instruction | InstructionPlan) {
+    return sendV1Transaction(context.connection, context.payer, [input], instructionSigners(input));
+}
 
 export async function fetchPartyBalance(context: ConfidentialContext, party: ConfidentialParty) {
     return await fetchConfidentialTransferBalance({
@@ -67,8 +101,9 @@ async function deriveConfidentialKeys(owner: Keypair, mint: Address): Promise<Co
 }
 
 export async function createConfidentialMint(context: ConfidentialContext): Promise<Address> {
-    const mint = await generateKeyPairSigner();
-    await send(context, [
+    const mint = await Keypair.generate();
+    await send(
+        context,
         await getCreateMintInstructionPlan(
             { getMinimumBalance: space => context.rpc.getMinimumBalanceForRentExemption(BigInt(space)).send() },
             {
@@ -85,7 +120,7 @@ export async function createConfidentialMint(context: ConfidentialContext): Prom
                 payer: context.payer,
             },
         ),
-    ]);
+    );
     return mint.address;
 }
 
@@ -100,7 +135,8 @@ export async function createConfidentialParty(
         owner: owner.address,
         tokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
     });
-    await send(context, [
+    await send(
+        context,
         await getCreateConfidentialTransferAccountInstructionPlan({
             aesKey: keys.aesKey,
             elgamalKeypair: keys.elgamalKeypair,
@@ -109,13 +145,14 @@ export async function createConfidentialParty(
             payer: context.payer,
             rpc: context.rpc,
         }),
-    ]);
+    );
     return { ...keys, owner, token };
 }
 
 export async function applyPendingBalance(context: ConfidentialContext, party: ConfidentialParty): Promise<void> {
     const account = await fetchToken(context.rpc, party.token);
-    await send(context, [
+    await send(
+        context,
         getApplyConfidentialPendingBalanceInstructionFromToken({
             aesKey: party.aesKey,
             authority: party.owner,
@@ -123,7 +160,7 @@ export async function applyPendingBalance(context: ConfidentialContext, party: C
             token: party.token,
             tokenAccount: account.data,
         }),
-    ]);
+    );
 }
 
 export async function fundConfidentially(
@@ -132,7 +169,8 @@ export async function fundConfidentially(
     party: ConfidentialParty,
     amount: bigint,
 ): Promise<void> {
-    await send(context, [
+    await send(
+        context,
         await getMintToATAInstructionPlanAsync({
             amount,
             decimals: MINT_DECIMALS,
@@ -141,8 +179,9 @@ export async function fundConfidentially(
             owner: party.owner.address,
             payer: context.payer,
         }),
-    ]);
-    await send(context, [
+    );
+    await send(
+        context,
         getConfidentialDepositInstruction({
             amount,
             authority: party.owner,
@@ -150,6 +189,6 @@ export async function fundConfidentially(
             mint,
             token: party.token,
         }),
-    ]);
+    );
     await applyPendingBalance(context, party);
 }

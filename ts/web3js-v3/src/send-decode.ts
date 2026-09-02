@@ -18,6 +18,7 @@ const { signature, transaction } = await sendV1Transaction(
             toPubkey: recipient.publicKey,
         }),
     ],
+    [],
     { computeUnitLimit: 20_000, heapSize: 64 * 1024, loadedAccountsDataSizeLimit: 64 * 1024 },
 );
 

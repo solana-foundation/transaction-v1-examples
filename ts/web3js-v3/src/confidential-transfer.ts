@@ -12,8 +12,9 @@ import {
     fetchPartyBalance,
     fundConfidentially,
     MINT_DECIMALS,
+    send,
 } from './lib/confidential';
-import { flattenInstructions, json, sendV1Transaction } from './lib/v1';
+import { json } from './lib/v1';
 
 const STARTING_BALANCE = 10_000n;
 const TRANSFER_AMOUNT = 2_500n;
@@ -56,10 +57,10 @@ const transferPlan = await getConfidentialTransferInstructionPlan({
     sourceTokenAccount: sourceAccount.data,
 });
 
-console.log('\n== packed as one v1 transaction ==');
-console.log(`  instructions:  ${flattenInstructions([transferPlan]).length}`);
+const { signature, transaction } = await send(context, transferPlan);
 
-const { signature, transaction } = await sendV1Transaction(context.connection, context.payer, [transferPlan]);
+console.log('\n== packed as one v1 transaction ==');
+console.log(`  instructions:  ${transaction.message.compiledInstructions.length}`);
 console.log(`  size:          ${transaction.serialize().length} of 4096 bytes`);
 
 const sent = await context.connection.getTransaction(signature, { maxSupportedTransactionVersion: 1 });

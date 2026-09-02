@@ -1,13 +1,4 @@
-import {
-    flattenInstructionPlan,
-    getSignersFromInstruction,
-    type Instruction,
-    type InstructionPlan,
-    isInstructionPlan,
-    isMessagePartialSigner,
-    isSingleInstructionPlan,
-    type MessagePartialSigner,
-} from '@solana/kit';
+import type { Instruction, InstructionPlan, MessagePartialSigner } from '@solana/kit';
 import {
     Connection,
     Keypair,
@@ -16,8 +7,6 @@ import {
     type V1TransactionConfig,
     VersionedTransaction,
 } from '@solana/web3.js';
-
-export type V1InstructionInput = Instruction | InstructionPlan | TransactionInstruction;
 
 export const PRIORITY_FEE_LAMPORTS = 5_000n;
 
@@ -30,50 +19,16 @@ export const RPC_URL = process.env.TXV1_RPC_URL ?? 'http://127.0.0.1:8899';
 export const json = (value: unknown) =>
     JSON.stringify(value, (_, entry) => (typeof entry === 'bigint' ? `${entry}` : entry));
 
-export function flattenInstructions(
-    inputs: ReadonlyArray<V1InstructionInput>,
-): Array<Instruction | TransactionInstruction> {
-    return inputs.flatMap(input => {
-        if (!isInstructionPlan(input)) {
-            return [input];
-        }
-        return [...flattenInstructionPlan(input)].map(leaf => {
-            if (!isSingleInstructionPlan(leaf)) {
-                throw new Error(`instruction plan leaf "${leaf.kind}" cannot fit in a single transaction`);
-            }
-            return leaf.instruction;
-        });
-    });
-}
-
-function collectSigners(
-    payer: Keypair,
-    instructions: ReadonlyArray<Instruction | TransactionInstruction>,
-): MessagePartialSigner[] {
-    const signers = new Map<string, MessagePartialSigner>([[payer.address, payer]]);
-    for (const instruction of instructions) {
-        if (!('accounts' in instruction)) {
-            continue;
-        }
-        for (const signer of getSignersFromInstruction(instruction)) {
-            if (isMessagePartialSigner(signer) && !signers.has(signer.address)) {
-                signers.set(signer.address, signer);
-            }
-        }
-    }
-    return [...signers.values()];
-}
-
 export async function sendV1Transaction(
     connection: Connection,
     payer: Keypair,
-    inputs: ReadonlyArray<V1InstructionInput>,
+    instructions: ReadonlyArray<Instruction | InstructionPlan | TransactionInstruction>,
+    signers: ReadonlyArray<MessagePartialSigner> = [],
     config?: V1TransactionConfig,
 ): Promise<{ signature: string; transaction: VersionedTransaction }> {
-    const instructions = flattenInstructions(inputs);
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     const message = MessageV1.compile({
-        instructions,
+        instructions: [...instructions],
         payerKey: payer.publicKey,
         recentBlockhash: blockhash,
         transactionConfig: {
@@ -85,7 +40,7 @@ export async function sendV1Transaction(
     });
 
     const transaction = new VersionedTransaction(message);
-    await transaction.sign(collectSigners(payer, instructions));
+    await transaction.sign([payer, ...signers]);
 
     const signature = await connection.sendTransaction(transaction, { preflightCommitment: 'confirmed' });
     await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, 'confirmed');
