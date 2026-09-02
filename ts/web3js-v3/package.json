@@ -1,0 +1,13 @@
+{
+    "name": "txv1-examples-web3js-v3",
+    "version": "0.1.0",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "dependencies": {
+        "@solana-program/token-2022": "^0.16.1",
+        "@solana/kit": "^8.2.0",
+        "@solana/web3.js": "^3.0.0-rc.3",
+        "@solana/zk-sdk": "^0.5.1"
+    }
+}
