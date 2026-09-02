@@ -1,7 +1,8 @@
 packages:
   - kit
   - kit-plugins
-  - web3js
+  - web3js-legacy
+  - web3js-v3
 
 onlyBuiltDependencies:
   - esbuild

@@ -75,7 +75,7 @@ importers:
         specifier: ^0.5.1
         version: 0.5.2
 
-  web3js:
+  web3js-legacy:
     dependencies:
       '@solana-program/system':
         specifier: ^0.13.0
@@ -86,6 +86,21 @@ importers:
       '@solana/web3.js':
         specifier: 1.99.0-beta.0
         version: 1.99.0-beta.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+
+  web3js-v3:
+    dependencies:
+      '@solana-program/token-2022':
+        specifier: ^0.16.1
+        version: 0.16.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@solana/sysvars@8.2.0(typescript@5.9.3))(@solana/zk-sdk@0.5.2)
+      '@solana/kit':
+        specifier: ^8.2.0
+        version: 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@solana/web3.js':
+        specifier: ^3.0.0-rc.3
+        version: 3.0.0-rc.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@solana/zk-sdk':
+        specifier: ^0.5.1
+        version: 0.5.2
 
 packages:
 
@@ -693,11 +708,26 @@ packages:
       oxlint:
         optional: true
 
+  '@solana-program/address-lookup-table@0.14.1':
+    resolution: {integrity: sha512-bYhSDq3lKB/kOIyx5jd91DwyDZH3GeBTpZaIO2YQC0ivFepPK4TWNwqFvdRfZ5wm5/70sp9Fs3lQeewUqVhXHA==}
+    peerDependencies:
+      '@solana/kit': ^8.0.0
+
   '@solana-program/compute-budget@0.17.0':
     resolution: {integrity: sha512-A87tabCdAhJJbZrAuTmVdt/SdkxFQQEzj4lFAvEeGZ96KcZ8ySomt0MHf4jquiqFAdc68xLfpPUHGUM/tswUtA==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       '@solana/kit': ^7.0.0
+
+  '@solana-program/compute-budget@0.18.1':
+    resolution: {integrity: sha512-ZVWknu3XvF6NI3zAuT6TXV19lQ7iDPzToM9gwI6KnUlnzHHP3u7IAIzDM7hLueQ6T7vLGjIUjYFCVg4mLHRZcg==}
+    peerDependencies:
+      '@solana/kit': ^8.0.0
+
+  '@solana-program/loader-v3@0.6.1':
+    resolution: {integrity: sha512-UdRqSVllXnMcVjybHA0/ZwcqgvijVuGqcsAxOjusveFM5HEFYxrgt3D01g/1rtsIX24IirV1y5NkfitI2I95Uw==}
+    peerDependencies:
+      '@solana/kit': ^8.0.0
 
   '@solana-program/record@0.3.0':
     resolution: {integrity: sha512-q8z86INfXRQ5357qgVBrw05vC+u3xg8Vb4E1gEwnYUvAkL3cbJSjWVfTlGRiGWYmPNq/FYIWbsFrhsxXyhaJ+w==}
@@ -707,6 +737,11 @@ packages:
 
   '@solana-program/record@0.4.1':
     resolution: {integrity: sha512-3iurtMAc3POMKVSZBqpNZQeoxAYVIxi0VZNOjkdaZqxr5glCxkWWruT8JekDwNFM0FnXxvtdu7tFFn3j6Kpegg==}
+    peerDependencies:
+      '@solana/kit': ^8.0.0
+
+  '@solana-program/stake@0.9.1':
+    resolution: {integrity: sha512-iguVMu4a4minZM9+7ttciKFVpoq4QOKbmsK2RxhwzauDuXhqYEJufk8GSXvZt3Q3ec7qep2Jq09SfCmutFtuwg==}
     peerDependencies:
       '@solana/kit': ^8.0.0
 
@@ -1393,6 +1428,10 @@ packages:
 
   '@solana/web3.js@1.99.0-beta.0':
     resolution: {integrity: sha512-hvDoGOocYkrg0YXLHmZe8TOtG2ojJYWJRUCaiQWFH9wmRXLdkALqukqhVRfhN/WFhsLi6Yj+7qPhn/iMipN5vw==}
+
+  '@solana/web3.js@3.0.0-rc.3':
+    resolution: {integrity: sha512-98v05nzDkV66Mvsi7a7rQvGWDg6gFzCBRXn0n678K64pRnu02uVd6mfWdMhZD3yZ4l2j0l2Kcg1bVb1e0pq6Ig==}
+    engines: {node: '>=20.18.0'}
 
   '@solana/zk-sdk@0.5.2':
     resolution: {integrity: sha512-4Bsjr45Vy7HMY7VSEGwGI/qgOXR0ytKH5XZtW2CbJcFdL1Txfd2tFdOL17q8P0ZXWgfwTGurJi96bWZs/XlHqg==}
@@ -2204,7 +2243,19 @@ snapshots:
       oxfmt: 0.48.0
       oxlint: 1.79.0(oxlint-tsgolint@7.0.2001)
 
+  '@solana-program/address-lookup-table@0.14.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
+    dependencies:
+      '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+
   '@solana-program/compute-budget@0.17.0(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
+    dependencies:
+      '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+
+  '@solana-program/compute-budget@0.18.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
+    dependencies:
+      '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+
+  '@solana-program/loader-v3@0.6.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
     dependencies:
       '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
 
@@ -2215,6 +2266,10 @@ snapshots:
   '@solana-program/record@0.4.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
     dependencies:
       '@solana-program/system': 0.14.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
+      '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+
+  '@solana-program/stake@0.9.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
+    dependencies:
       '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
 
   '@solana-program/system@0.13.0(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
@@ -3002,6 +3057,26 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - encoding
+      - typescript
+      - utf-8-validate
+
+  '@solana/web3.js@3.0.0-rc.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)':
+    dependencies:
+      '@noble/curves': 1.9.7
+      '@noble/hashes': 1.8.0
+      '@solana-program/address-lookup-table': 0.14.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
+      '@solana-program/compute-budget': 0.18.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
+      '@solana-program/loader-v3': 0.6.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
+      '@solana-program/stake': 0.9.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
+      '@solana-program/system': 0.14.1(@solana/kit@8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
+      '@solana/assertions': 8.2.0(typescript@5.9.3)
+      '@solana/fast-stable-stringify': 8.2.0(typescript@5.9.3)
+      '@solana/kit': 8.2.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@solana/rpc-spec-types': 8.2.0(typescript@5.9.3)
+      '@solana/signers': 8.2.0(typescript@5.9.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - fastestsmallesttextencoderdecoder
       - typescript
       - utf-8-validate
 

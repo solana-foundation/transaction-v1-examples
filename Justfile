@@ -64,7 +64,7 @@ lint: _py-install
     cd go && go vet ./...
 
 typecheck: _py-install
-    cd ts && pnpm exec tsc -p kit/tsconfig.json --noEmit && pnpm exec tsc -p kit-plugins/tsconfig.json --noEmit && pnpm exec tsc -p web3js/tsconfig.json --noEmit
+    cd ts && pnpm exec tsc -p kit/tsconfig.json --noEmit && pnpm exec tsc -p kit-plugins/tsconfig.json --noEmit && pnpm exec tsc -p web3js-legacy/tsconfig.json --noEmit && pnpm exec tsc -p web3js-v3/tsconfig.json --noEmit
     cd python && .venv/bin/mypy
     cd go && go build ./...
 
@@ -147,9 +147,17 @@ kp-send-decode:
 kp-confidential-transfer:
     cd ts/kit-plugins && pnpm exec tsx src/confidential-transfer.ts
 
-# Read a v1 transaction back over JSON-RPC with @solana/web3.js. Pass a signature to read an existing one.
+# Read a v1 transaction back over JSON-RPC with the @solana/web3.js 1.x beta. Pass a signature to read an existing one.
 w3-read-transaction signature="":
-    cd ts/web3js && pnpm exec tsx src/read-transaction.ts {{ signature }}
+    cd ts/web3js-legacy && pnpm exec tsx src/read-transaction.ts {{ signature }}
+
+# Send a v1 transfer with @solana/web3.js 3.x, read it back, and decode the wire bytes.
+w3v3-send-decode:
+    cd ts/web3js-v3 && pnpm exec tsx src/send-decode.ts
+
+# Send a whole Token-2022 confidential transfer in one v1 transaction with @solana/web3.js 3.x.
+w3v3-confidential-transfer:
+    cd ts/web3js-v3 && pnpm exec tsx src/confidential-transfer.ts
 
 py-send-decode: _py-install
     cd python && .venv/bin/python examples/send_decode.py
@@ -186,6 +194,8 @@ _demo-inner:
     just kp-send-decode
     just kp-confidential-transfer
     just w3-read-transaction
+    just w3v3-send-decode
+    just w3v3-confidential-transfer
     just py-send-decode
     just py-get-block
     just go-send-decode

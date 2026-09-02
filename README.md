@@ -17,7 +17,7 @@ A v1 message carries a `TransactionConfig` instead of ComputeBudget program inst
 | Address lookup tables | v0 only | never |
 | Message version prefix | `0x80` (v0) | `0x81` |
 
-Existing pipelines that derives priority fees or compute budget by scanning instructions reports 0 for every v1 transaction, and raises nothing.
+An existing pipeline that derives priority fees or compute budget by scanning Compute Budget instructions reports 0 for every v1 transaction, and raises nothing.
 
 ## Quick start
 
@@ -43,8 +43,6 @@ solana -u l feature status txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL
 
 ## Examples
 
-Each example prints the same facts in every language that has it, except where the table says otherwise.
-
 | What | Rust | TypeScript | Python | Go |
 |---|---|---|---|---|
 | Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` | `just go-send-decode` |
@@ -56,37 +54,31 @@ Each example prints the same facts in every language that has it, except where t
 | Send and read a v1 transfer through a `@solana/kit` plugin client | — | `just kp-send-decode` | — | — |
 | Send a confidential transfer through a `@solana/kit` plugin client | — | `just kp-confidential-transfer` | — | — |
 | Read a v1 transaction with the `@solana/web3.js` 1.x beta | — | `just w3-read-transaction` | — | — |
+| Send and read a v1 transfer with `@solana/web3.js` 3.x | — | `just w3v3-send-decode` | — | — |
+| Send a confidential transfer with `@solana/web3.js` 3.x | — | `just w3v3-confidential-transfer` | — | — |
 | Index transactions over gRPC | `just grpc-tx-indexer` | `just ts-grpc-tx-indexer` | — | `just go-grpc-tx-indexer` |
 | Index blocks over gRPC | `just grpc-block-indexer` | `just ts-grpc-block-indexer` | — | `just go-grpc-block-indexer` |
 
-Source: [`rust/src/bin/`](rust/src/bin), [`ts/kit/src/`](ts/kit/src), [`ts/kit-plugins/src/`](ts/kit-plugins/src), [`ts/web3js/src/`](ts/web3js/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
-
-Every TypeScript example uses `@solana/kit` except the last two. [`ts/kit-plugins/`](ts/kit-plugins) rebuilds two of them on the `@solana/kit` plugin clients instead of the `pipe`-based message builders, so the pairs can be read side by side: the version is set once in `transactionConfig` when the client is assembled, and the compute unit limit and loaded accounts data size limit are estimated by simulation rather than hard-coded. The confidential transfer is the sharper comparison — `client.sendTransactions(plan)` replaces the hand-rolled transaction planner and executor in [`ts/kit/src/lib/confidential.ts`](ts/kit/src/lib/confidential.ts), and the `systemProgram()` and `token2022Program()` plugins put typed instruction builders and account fetchers on the client itself. See [`ts/kit-plugins/README.md`](ts/kit-plugins/README.md). The last reads a v1 transaction with the `@solana/web3.js` 1.x beta. That beta deserializes v1 and exposes the transaction config, but `MessageV1.serialize` throws, so it can read v1 and not write it — [`ts/web3js/src/read-transaction.ts`](ts/web3js/src/read-transaction.ts) sends the transaction it reads with kit.
-
-Python covers the JSON-RPC basics only, and no gRPC. `solders` binds the same Rust crates the Rust examples use, so v1 support arrives with it, but Yellowstone publishes no Python client on PyPI — a Python consumer generates its own stubs, and the protobuf caveat below then applies to whichever `.proto` it generated them from.
+Source: [`rust/src/bin/`](rust/src/bin), [`ts/kit/src/`](ts/kit/src), [`ts/kit-plugins/src/`](ts/kit-plugins/src), [`ts/web3js-legacy/src/`](ts/web3js-legacy/src), [`ts/web3js-v3/src/`](ts/web3js-v3/src), [`python/examples/`](python/examples), and [`go/cmd/`](go/cmd).
 
 ## Do more with Larger Transactions
 
-v1 raises the transaction size limit from **1,232 bytes to 4,096**, enabling things like the ability to send a [Token-2022 confidential transfer](https://solana.com/docs/tokens/extensions/confidential-transfer) in a single transaction. A confidential transfer is three client-generated zero-knowledge proofs, each written into its own context state account, then the transfer instruction that reads all three, then three closes to reclaim the rent. `@solana-program/token-2022` hands that back as an `InstructionPlan` for a transaction planner to split, because under the legacy limit it cannot be one transaction.
+v1 raises the transaction size limit from **1,232 bytes to 4,096**, which is enough to send a [Token-2022 confidential transfer](https://solana.com/docs/tokens/extensions/confidential-transfer) in one transaction. A transfer is three client-generated zero-knowledge proofs, each written into its own context state account, the transfer instruction that reads all three, then three closes to reclaim the rent — which `@solana-program/token-2022` hands back as an `InstructionPlan` for a planner to split, because under the legacy limit it cannot be one transaction.
 
-With v1, it all fits into a single transaction. [`just ts-confidential-transfer`](ts/kit/src/confidential-transfer.ts) assembles the transfer, packs it into a single v1 message, and sends it as an atomic transaction — ten instructions and 2,897 of the 4,096 bytes. [`just kp-confidential-transfer`](ts/kit-plugins/src/confidential-transfer.ts) does the same thing on a plugin client, where `sendTransaction` is what asserts the plan fits in one transaction.
+Under v1 it all fits: ten instructions and 2,897 of the 4,096 bytes. [`just ts-confidential-transfer`](ts/kit/src/confidential-transfer.ts) packs and sends it, [`just kp-confidential-transfer`](ts/kit-plugins/src/confidential-transfer.ts) does it on a plugin client where `sendTransaction` asserts the plan fits, and [`just w3v3-confidential-transfer`](ts/web3js-v3/src/confidential-transfer.ts) does it on `@solana/web3.js` 3.x.
 
 
 ### The local validator needs a different Token-2022
 
-`solana-test-validator` bundles a Token-2022 build with the `zk-ops` feature compiled out. Every confidential-transfer instruction that moves an amount — `Deposit`, `Withdraw`, `Transfer`, `ApplyPendingBalance` — returns `InvalidInstructionData` without looking at its arguments, while the instructions that only configure an account are not behind the feature and succeed. So an account configures cleanly and every transfer against it fails, with an error that says nothing about a missing feature.
-
-[`scripts/setup-token-2022.sh`](scripts/setup-token-2022.sh) fetches the program published with a token-2022 release — the same binary mainnet runs — and [`scripts/validator.sh`](scripts/validator.sh) loads it at the Token-2022 address instead.
-
-That only happens for a validator this script starts. `just validator-start` reuses one that is already answering on 8899, and a validator started by hand keeps the bundled program and takes the failure above. So the script compares the deployed program's length against the one it fetched, and refuses to hand back a validator that cannot run a confidential transfer.
+`solana-test-validator` bundles a Token-2022 build with `zk-ops` compiled out. [`scripts/setup-token-2022.sh`](scripts/setup-token-2022.sh) fetches the program published with a token-2022 release — the same binary mainnet runs — and [`scripts/validator.sh`](scripts/validator.sh) loads it at the Token-2022 address instead.
 
 ## Common gotchas
 
-**Unset config fields are not defaults.** An absent `computeUnitLimit` or `loadedAccountsDataSizeLimit` resolves to **zero**. Only `heapSize` falls back to the 32 KB default. (The 200,000-CUs-per-instruction fallback is the legacy/v0 rule and does not apply here; `solana_message::v1::TransactionConfig` is the authority) - v1 transactions without config fields set will fail.
+**Unset config fields are not defaults.** An absent `computeUnitLimit` or `loadedAccountsDataSizeLimit` resolves to **zero**, so the transaction fails; only `heapSize` falls back to the 32 KB default. The 200,000-CUs-per-instruction fallback is the legacy/v0 rule and does not apply — `solana_message::v1::TransactionConfig` is the authority.
 
-**JSON-RPC pinned at `maxSupportedTransactionVersion: 0` starts failing.** The parameter is a ceiling: ask for a v1 transaction with it set to 0 and the request errors. For `getBlock` that takes down the *entire block*, not just the offending transaction, so one v1 transaction is enough to blind a caller for that slot. Raise it to 1.
+**JSON-RPC pinned at `maxSupportedTransactionVersion: 0` starts failing.** The parameter is a ceiling, so asking for a v1 transaction errors. For `getBlock` that takes down the *entire block*, so one v1 transaction blinds a caller for that slot. Raise it to 1.
 
-**gRPC gives no warning.** There is no equivalent parameter, no version field, and no server-side filter. Once the feature gate activates, v1 transactions show up in the stream looking like any other, so a consumer that never learned about `config` keeps running and quietly misreports them. Over gRPC, `Message.versioned` is `true` for both. The only signal is whether `config` is present.
+**gRPC gives no warning.** No equivalent parameter, no version field, no server-side filter. v1 transactions show up in the stream looking like any other, and `Message.versioned` is `true` for v0 and v1 alike — the only signal is whether `config` is present.
 
 ```rust
 match (&message.config, message.versioned) {
@@ -96,28 +88,28 @@ match (&message.config, message.versioned) {
 }
 ```
 
-**Stale generated protobuf drops the config.** `config` was added to the `Message` protobuf as field 7, and protobuf clients silently discard fields their generated schema does not know about. So a consumer built before that field existed decodes a v1 message into something that looks exactly like v0 with no compute budget — no error, just missing data. On the TypeScript side the field arrived in `@triton-one/yellowstone-grpc` 6.0.0; every 5.x release drops it, so a pin like `^5.0.9` is enough to lose every v1 budget.
+**Stale generated protobuf drops the config.** `config` is field 7 on the `Message` protobuf, and protobuf clients silently discard fields their schema does not know — so a consumer built before it existed decodes a v1 message into something that looks exactly like v0 with no compute budget. In TypeScript the field arrived in `@triton-one/yellowstone-grpc` 6.0.0; a pin like `^5.0.9` loses every v1 budget.
 
-Go has no release that carries the field at all. yellowstone-grpc ships its Go client as pre-generated code checked into `examples/golang/proto/`, and that code was generated before field 7 was added — so on the tag whose geyser plugin *sends* the config, the Go client that ships alongside it silently drops it. [`scripts/gen-go-proto.sh`](scripts/gen-go-proto.sh) generates [`go/pb/`](go/pb) from the tag's `.proto` instead, and fails loudly if `Message.config` is missing from the result.
+Go has no release carrying the field at all: yellowstone-grpc checks its Go client in at `examples/golang/proto/`, generated before field 7, so the tag whose geyser plugin *sends* the config ships a client that drops it. [`scripts/gen-go-proto.sh`](scripts/gen-go-proto.sh) generates [`go/pb/`](go/pb) from the tag's `.proto` instead, and fails loudly if `Message.config` is missing.
 
 ## Reading a budget that works for every version
 
-The examples above isolate v1, but a real indexer has to handle all three versions with one accessor. That is [`rust/src/budget.rs`](rust/src/budget.rs), [`ts/kit/src/lib/budget.ts`](ts/kit/src/lib/budget.ts), and [`go/txv1/budget.go`](go/txv1/budget.go): read `config` on v1, scan ComputeBudget instructions on legacy and v0, and normalise the priority fee so the two are comparable.
+An indexer needs one accessor for all three versions. That is [`rust/src/budget.rs`](rust/src/budget.rs), [`ts/kit/src/lib/budget.ts`](ts/kit/src/lib/budget.ts), and [`go/txv1/budget.go`](go/txv1/budget.go): read `config` on v1, scan ComputeBudget instructions on legacy and v0, and normalise the priority fee so the two are comparable.
 
-The fee is the fiddly part. v0 states a *price* in micro-lamports per compute unit; v1 states a *total* in lamports. Comparing them means multiplying the v0 price by the compute unit limit — including the implicit `min(200_000 × instructions, 1_400_000)` limit when the transaction never set one — and rounding up:
+legacy/v0 states a *price* in micro-lamports per compute unit; v1 states a *total* in lamports. Comparing them means multiplying the v0 price by the compute unit limit — including the implicit `min(200_000 × instructions, 1_400_000)` when the transaction never set one — and rounding up:
 
 ```
 20,000 CU × 250,000 micro-lamports/CU = 5,000 lamports   // v0
                                         5,000 lamports   // the v1 equivalent
 ```
 
-Both gRPC indexers print this normalised budget for every transaction they see, whatever its version.
+Both gRPC indexers print this normalised budget for every transaction, whatever its version.
 
-A consumer that never touches gRPC has the same problem one layer up: a facilitator, a relayer, or a simulation service is handed a base64 transaction and has to price it before it knows what version it is. [`just ts-decode-budget`](ts/kit/src/decode-budget.ts) builds the same budget three ways and prints what comes back out of each; pass it a base64 transaction to read that one instead. It needs no validator.
+A facilitator, relayer, or simulation service has the same problem one layer up: it is handed a base64 transaction and has to price it before it knows the version. [`just ts-decode-budget`](ts/kit/src/decode-budget.ts) builds the same budget three ways and prints what comes back out of each; pass it a base64 transaction to read that one instead. It needs no validator.
 
 ## Setting a budget across versions
 
-Reading is one half; writing is the other, and kit's setters do not all accept the same versions. Three of the four budget fields route by version on their own, so existing code that sets them keeps working when the message becomes v1:
+kit's setters do not all accept the same versions. Three of the four budget fields route by version on their own, so existing code that sets them keeps working when the message becomes v1:
 
 | Setter | legacy / v0 | v1 |
 |---|---|---|
@@ -130,9 +122,11 @@ Reading is one half; writing is the other, and kit's setters do not all accept t
 
 The priority fee is the one that does not port, for the same reason it complicates reading: micro-lamports per compute unit and a total in lamports are different quantities, so they get different setters and neither accepts the other's versions. Only the type system enforces this — call the wrong one and the runtime attaches a `config` to a v0 message or a ComputeBudget instruction to a v1 one.
 
-`setTransactionMessageConfig` merges into whatever config the message already holds, so `EXAMPLE_CONFIG` in [`ts/kit/src/send-decode.ts`](ts/kit/src/send-decode.ts) could equally be built up one field at a time; passing `undefined` for a field unsets it, and unsetting the last one removes `config` from the message altogether. [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) pins all of this down offline.
+`setTransactionMessageConfig` merges into the config the message already holds, so `EXAMPLE_CONFIG` in [`ts/kit/src/send-decode.ts`](ts/kit/src/send-decode.ts) could be built up one field at a time; passing `undefined` unsets a field, and unsetting the last one removes `config` altogether.
 
-`solana-go` draws the line in the other place. `solana.TransactionV1Config(config)` both selects the v1 format and carries the whole budget, and its `With*` methods chain onto a zero `solana.TransactionConfig`, so there is one setter rather than six and no way to reach for the wrong one. What kit rejects at compile time, `solana.NewTransaction` rejects at runtime: passing a ComputeBudget instruction or an address lookup table alongside a v1 config is an error, not a silently ignored no-op. [`go/txv1/wire_test.go`](go/txv1/wire_test.go) pins the same wire-level facts down offline.
+`solana-go` draws the line elsewhere. `solana.TransactionV1Config(config)` both selects the v1 format and carries the whole budget, and its `With*` methods chain onto a zero `solana.TransactionConfig` — one setter rather than six, and no way to reach for the wrong one. What kit rejects at compile time, `solana.NewTransaction` rejects at runtime: a ComputeBudget instruction or a lookup table alongside a v1 config is an error, not a silent no-op.
+
+[`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) and [`go/txv1/wire_test.go`](go/txv1/wire_test.go) pin all of this down offline.
 
 ## Version requirements
 
@@ -142,33 +136,34 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `solana-message` | 4.2.0 | `v1::Message` landed in 4.1.0; 4.2.0 adds the inherent `Message::serialize()` these examples call |
 | `yellowstone-grpc-proto` | 12.6.0 | first release whose generated code has `Message.config` |
 | yellowstone-grpc geyser | 15.1.1 | `convert_from` no longer downgrades v1 to v0 |
-| `@solana/kit` | 8.0.0 | v1 codecs, config setters, and `maxSupportedTransactionVersion: 1` landed in 7.1.1; 8.0.0 is the first version to type `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)), which is what lets a v1 message be built through the same `pipe` as a legacy or v0 one |
-| `@solana-program/token-2022` | 0.15.0 | the `confidential` entry point, its instruction-plan helpers, and `solana-conf-bal/v1` key derivation |
+| `@solana/kit` | 8.0.0 | codecs and setters landed in 7.1.1; 8.0.0 types `createTransactionMessage({ version: 1 })` ([kit#1950](https://github.com/anza-xyz/kit/pull/1950)), so v1 builds through the same `pipe` as v0 |
+| `@solana-program/token-2022` | 0.15.0 | the `confidential` entry point, its plan helpers, and `solana-conf-bal/v1` key derivation |
 | `@solana/zk-sdk` | 0.5.1 | the WASM proof generation the confidential helpers call |
 | Token-2022 program | `program@v11.0.0` | a build with `zk-ops` enabled — see above |
-| `@solana/kit-plugin-rpc` | 0.19.0 | first release whose transaction planner takes `version: 1`, splitting `TransactionPlannerConfig` into a legacy/v0 arm keyed by `microLamportsPerComputeUnit` and a v1 arm keyed by `priorityFeeLamports`, and estimating the v1 loaded accounts data size limit alongside the compute unit limit |
-| `@solana-program/system` | 0.14.1 | first release exporting the `systemProgram()` plugin, which adds `client.system` to a plugin client — `ts/kit-plugins` only; `ts/kit` stays on 0.13.0 |
-| `@solana-program/token-2022` (plugin) | 0.16.1 | first release exporting the `token2022Program()` plugin, which adds `client.token2022` — `ts/kit-plugins` only; `ts/kit` stays on 0.15.0 |
-| `@solana/kit-plugin-signer` | 0.19.0 | the release `@solana/kit-plugin-rpc` 0.19.0 is published alongside; supersedes the deprecated `@solana/kit-plugin-payer` and `@solana/kit-plugin-airdrop` |
-| `@solana/web3.js` | 1.99.0-beta.0 | first 1.x prerelease with `MessageV1` and `maxSupportedTransactionVersion: 1`; it deserializes v1 but cannot serialize it |
+| `@solana/kit-plugin-rpc` | 0.19.0 | first planner taking `version: 1`, with a v1 arm keyed by `priorityFeeLamports` and loaded-accounts estimation |
+| `@solana-program/system` | 0.14.1 | the `systemProgram()` plugin — `ts/kit-plugins` only; `ts/kit` stays on 0.13.0 |
+| `@solana-program/token-2022` (plugin) | 0.16.1 | the `token2022Program()` plugin — `ts/kit-plugins` only; `ts/kit` stays on 0.15.0 |
+| `@solana/kit-plugin-signer` | 0.19.0 | published alongside `@solana/kit-plugin-rpc` 0.19.0; supersedes the deprecated `kit-plugin-payer` and `kit-plugin-airdrop` |
+| `@solana/web3.js` | 1.99.0-beta.0 | first 1.x prerelease with `MessageV1`; deserializes v1 but cannot serialize it |
+| `@solana/web3.js` (3.x) | 3.0.0-rc.3 | `MessageV1.compile`, which writes v1 and takes kit instructions and plans — `ts/web3js-v3` |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
 | Go | 1.25 | the toolchain the `grpc-go` and `golang.org/x` dependencies require |
-| `solana-go` | 2.0.0 | first stable release on the `github.com/solana-foundation/solana-go/v2` module path; carries the v1 transaction format from [solana-go#481](https://github.com/solana-foundation/solana-go/pull/481), released in v1.23.0 |
+| `solana-go` | 2.0.0 | first stable release on the `/v2` module path; carries the v1 format from [solana-go#481](https://github.com/solana-foundation/solana-go/pull/481) |
 
 ### These examples pin `yellowstone-grpc-proto` directly
 
-`yellowstone-grpc-client` 13.3.0 only requires `yellowstone-grpc-proto = "12.5.0"`, and 12.5.0 has no field 7 — so on a lockfile written before 2026-08-13 the resolver picks a proto crate that drops every v1 config without erroring. [`rust/Cargo.toml`](rust/Cargo.toml) pins 12.6.0 directly so that cannot happen, and CI runs `--locked` so a resolution change fails the build rather than drifting.
+`yellowstone-grpc-client` 13.3.0 only requires `yellowstone-grpc-proto = "12.5.0"`, which has no field 7 — so on a lockfile written before 2026-08-13 the resolver picks a proto crate that drops every v1 config without erroring. [`rust/Cargo.toml`](rust/Cargo.toml) pins 12.6.0 directly, and CI runs `--locked` so a resolution change fails the build rather than drifting.
 
 ### These examples use the v2 `solana-go` module path
 
-SIMD-0385 support landed in [PR #481](https://github.com/solana-foundation/solana-go/pull/481), which adds `solana.TransactionConfig`, `solana.MessageVersionV1`, and the `solana.TransactionV1Config` build option. It shipped in `solana-go` v1.23.0 and in v2.0.0.
+SIMD-0385 support landed in [PR #481](https://github.com/solana-foundation/solana-go/pull/481) — `solana.TransactionConfig`, `solana.MessageVersionV1`, and the `solana.TransactionV1Config` build option — and shipped in v1.23.0 and v2.0.0.
 
-The Go examples import `github.com/solana-foundation/solana-go/v2`. v2 moved the module path off `github.com/gagliardetto/solana-go` and reworked `rpc/ws` and the loader-program packages, none of which these examples use — the same code builds against the v1 line with only the import path changed.
+The Go examples import `github.com/solana-foundation/solana-go/v2`. v2 moved the module path off `github.com/gagliardetto/solana-go` and reworked `rpc/ws` and the loader packages, none of which these examples use — the same code builds against the v1 line with only the import path changed.
 
 ## Configuration
 
-Every example reads its endpoints from the environment, and the Rust binaries also accept equivalent flags.
+Every example reads its endpoints from the environment; the Rust and Go binaries also accept equivalent flags.
 
 | Variable | Default | Used by |
 |---|---|---|
@@ -180,7 +175,7 @@ Every example reads its endpoints from the environment, and the Rust binaries al
 | `TXV1_EXIT_AFTER_V1` | unset | stop the TypeScript or Go transaction indexer after N v1 transactions |
 | `TXV1_EXIT_AFTER_V1_BLOCKS` | unset | stop the TypeScript or Go block indexer after N blocks holding v1 |
 
-Rust flags: `--rpc-url`, `--grpc-url`, `--slot` (get-block), `--exit-after-v1` / `--exit-after-v1-blocks` (indexers). The Go commands take the same names with Go's single-dash spelling: `-rpc-url`, `-grpc-url`, `-slot`, `-exit-after-v1`, `-exit-after-v1-blocks`.
+Rust flags: `--rpc-url`, `--grpc-url`, `--slot` (get-block), `--exit-after-v1` / `--exit-after-v1-blocks` (indexers). Go takes the same names single-dashed.
 
 ## Testing
 
@@ -190,9 +185,7 @@ just test-live  # everything, against a validator started for the run
 just check      # what CI runs on every PR, minus the live tests
 ```
 
-Offline tests need no network. Live tests start a 4.2.1 validator with the geyser plugin, send real v1 traffic, and assert on what comes back over JSON-RPC and gRPC.
-
-CI runs both jobs on every pull request. The live job downloads the prebuilt geyser plugin published for x86_64 Linux, so it does not pay for a source build.
+Live tests start a 4.2.1 validator with the geyser plugin, send real v1 traffic, and assert on what comes back over JSON-RPC and gRPC. CI runs both jobs on every pull request, and the live job downloads the prebuilt geyser plugin for x86_64 Linux rather than paying for a source build.
 
 ## Layout
 
@@ -204,7 +197,8 @@ ts/kit/src/           @solana/kit example scripts, one per example
 ts/kit/src/lib/       the modules they share
 ts/kit/test/          offline and live tests
 ts/kit-plugins/src/   @solana/kit plugin-client example scripts, plus the lib/ they share
-ts/web3js/src/        @solana/web3.js example scripts
+ts/web3js-legacy/src/ @solana/web3.js 1.x example scripts
+ts/web3js-v3/src/     @solana/web3.js 3.x example scripts, plus the lib/ they share
 python/examples/      Python example scripts, one per example
 python/src/txv1/      the package they share
 python/tests/         offline and live tests
@@ -216,7 +210,7 @@ scripts/              validator, geyser plugin, Token-2022, and protobuf bootstr
 
 Each language directory is self-contained: `rust/` is a single Cargo package, `ts/` a pnpm workspace with one package per client library, `python/` a single hatchling package, and `go/` a single Go module, all driven from the root `Justfile`.
 
-Every language separates the runnable examples from the code they share. A file directly under `ts/kit/src/` or `ts/kit-plugins/src/`, in `rust/src/bin/`, in `python/examples/`, or in `go/cmd/` is an entry point — it runs top to bottom and has a `just` recipe. Everything in `ts/kit/src/lib/` and `ts/kit-plugins/src/lib/`, directly under `rust/src/`, in `python/src/txv1/`, and in `go/txv1/` is importable and free of side effects, and they mirror each other module for module: `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, and `send` builds and sends a v1 transfer. TypeScript adds `confidential`, which has no counterpart elsewhere. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module, since Go has no submodules within a package.
+Runnable examples are separate from the code they share everywhere. A file directly under a `src/`, `examples/`, `src/bin/`, or `cmd/` directory is an entry point: it runs top to bottom and has a `just` recipe. The `lib/` and shared-package modules are importable and free of side effects, and mirror each other — `budget` reads a compute budget from any version, `grpc` and `rpc` wrap the two transports, `feature` checks the activation gate, `send` builds and sends a v1 transfer, and `confidential` (TypeScript only) sets up a confidential transfer. Python has no `budget` or `grpc`, since it ships no gRPC example. Go keeps them in one package, one file per module.
 
 
 ## Additional Resources
