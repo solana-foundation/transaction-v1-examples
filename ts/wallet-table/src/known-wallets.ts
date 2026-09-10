@@ -14,5 +14,5 @@ export const KNOWN_WALLETS: Readonly<Record<string, KnownWallet>> = {
     Backpack: { url: 'https://backpack.app' },
     Phantom: { url: 'https://phantom.com' },
     Solflare: { url: 'https://solflare.com' },
-    Jupiter: { url: 'https://jup.ag/wallet', v1UpdateVersion: '1.18.0'}
+    Jupiter: { url: 'https://jup.ag/wallet', v1UpdateVersion: '1.18.0' },
 };
