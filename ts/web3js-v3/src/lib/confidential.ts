@@ -22,9 +22,9 @@ import {
     type Instruction,
     type InstructionPlan,
     type InstructionPlanInput,
-    isMessagePartialSigner,
+    isTransactionPartialSigner,
     isSingleInstructionPlan,
-    type MessagePartialSigner,
+    type TransactionPartialSigner,
     parseInstructionPlanInput,
 } from '@solana/kit';
 import { Connection, Keypair } from '@solana/web3.js';
@@ -60,14 +60,14 @@ export async function createConfidentialContext(airdrop: number): Promise<Confid
  * Confidential transfers generate ephemeral proof-context keypairs internally,
  * so their signers are only reachable through the instructions themselves.
  */
-function instructionSigners(input: InstructionPlanInput): MessagePartialSigner[] {
-    const signers = new Map<string, MessagePartialSigner>();
+function instructionSigners(input: InstructionPlanInput): TransactionPartialSigner[] {
+    const signers = new Map<string, TransactionPartialSigner>();
     for (const leaf of flattenInstructionPlan(parseInstructionPlanInput(input))) {
         if (!isSingleInstructionPlan(leaf)) {
             continue;
         }
         for (const signer of getSignersFromInstruction(leaf.instruction)) {
-            if (isMessagePartialSigner(signer)) {
+            if (isTransactionPartialSigner(signer)) {
                 signers.set(signer.address, signer);
             }
         }

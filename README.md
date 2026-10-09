@@ -145,8 +145,8 @@ The priority fee is the one that does not port, for the same reason it complicat
 | `@solana-program/system` | 0.14.1 | the `systemProgram()` plugin — `ts/kit-plugins` only; `ts/kit` stays on 0.13.0 |
 | `@solana-program/token-2022` (plugin) | 0.16.1 | the `token2022Program()` plugin — `ts/kit-plugins` only; `ts/kit` stays on 0.15.0 |
 | `@solana/kit-plugin-signer` | 0.19.0 | published alongside `@solana/kit-plugin-rpc` 0.19.0; supersedes the deprecated `kit-plugin-payer` and `kit-plugin-airdrop` |
-| `@solana/web3.js` | 1.99.0-beta.0 | first 1.x prerelease with `MessageV1`; deserializes v1 but cannot serialize it |
-| `@solana/web3.js` (3.x) | 3.0.0-rc.3 | `MessageV1.compile`, which writes v1 and takes kit instructions and plans — `ts/web3js-v3` |
+| `@solana/web3.js` | 1.99.0 | first 1.x release with `MessageV1`; deserializes v1 but cannot serialize it |
+| `@solana/web3.js` (3.x) | 3.0.0 | `MessageV1.compile`, which writes v1 and takes kit instructions and plans — `ts/web3js-v3` |
 | `@triton-one/yellowstone-grpc` | 6.0.0 | first release whose generated code has `Message.config`; 5.0.9 and earlier drop field 7 |
 | `solders` | 0.29.0 | first release with `MessageV1`, and the first to serialize versioned messages with wincode |
 | Go | 1.25 | the toolchain the `grpc-go` and `golang.org/x` dependencies require |

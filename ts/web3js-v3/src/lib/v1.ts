@@ -1,4 +1,4 @@
-import type { Instruction, InstructionPlan, MessagePartialSigner } from '@solana/kit';
+import type { Instruction, InstructionPlan, TransactionPartialSigner } from '@solana/kit';
 import {
     Connection,
     Keypair,
@@ -23,7 +23,7 @@ export async function sendV1Transaction(
     connection: Connection,
     payer: Keypair,
     instructions: ReadonlyArray<Instruction | InstructionPlan | TransactionInstruction>,
-    signers: ReadonlyArray<MessagePartialSigner> = [],
+    signers: ReadonlyArray<TransactionPartialSigner> = [],
     config?: V1TransactionConfig,
 ): Promise<{ signature: string; transaction: VersionedTransaction }> {
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');

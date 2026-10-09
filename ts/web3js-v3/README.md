@@ -1,6 +1,6 @@
 # web3js-v3
 
-Transaction v1 examples on `@solana/web3.js` 3.x (`^3.0.0-rc.3`), which reads
+Transaction v1 examples on `@solana/web3.js` 3.x (`^3`), which reads
 _and_ writes v1 — unlike the 1.x beta in
 [`../web3js-legacy`](../web3js-legacy), whose `MessageV1.serialize` throws.
 
