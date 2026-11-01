@@ -108,6 +108,16 @@ send-decode:
 get-block slot="":
     cd rust && cargo run --bin get-block -- {{ if slot == "" { "" } else { "--slot " + slot } }}
 
+estimate:
+    cd rust && cargo run --bin estimate
+
+# Read the compute budget out of a base64 transaction of any version. Needs no validator.
+decode-budget base64="":
+    cd rust && cargo run --bin decode-budget -- '{{ base64 }}'
+
+nonce:
+    cd rust && cargo run --bin nonce
+
 grpc-tx-indexer:
     cd rust && cargo run --bin grpc-tx-indexer
 
@@ -189,6 +199,9 @@ demo:
 _demo-inner:
     just send-decode
     just get-block
+    just estimate
+    just decode-budget
+    just nonce
     just ts-send-decode
     just ts-estimate
     just ts-decode-budget

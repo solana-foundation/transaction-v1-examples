@@ -3,8 +3,9 @@
 use anyhow::{Context, Result};
 use solana_address::Address;
 use solana_commitment_config::CommitmentConfig;
+use solana_hash::Hash;
 use solana_keypair::Keypair;
-use solana_message::{v1, VersionedMessage};
+use solana_message::{v1, Instruction, VersionedMessage};
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_signer::Signer;
 use solana_transaction::versioned::VersionedTransaction;
@@ -34,6 +35,31 @@ pub fn funded_keypair(client: &RpcClient, lamports: u64) -> Result<Keypair> {
     Ok(payer)
 }
 
+/// Builds a signed v1 transaction.
+///
+/// `lifetime_specifier` is what v1 calls the recent blockhash slot: a blockhash
+/// the transaction expires with, or a durable nonce when the first instruction
+/// is `AdvanceNonceAccount`. `signers` must cover every signing account in
+/// `instructions`, the payer included.
+pub fn build_v1_transaction(
+    payer: &Keypair,
+    instructions: &[Instruction],
+    lifetime_specifier: Hash,
+    config: v1::TransactionConfig,
+    signers: &[&Keypair],
+) -> Result<VersionedTransaction> {
+    let message = v1::Message::try_compile_with_config(
+        &payer.pubkey(),
+        instructions,
+        lifetime_specifier,
+        config,
+    )?;
+    Ok(VersionedTransaction::try_new(
+        VersionedMessage::V1(message),
+        signers,
+    )?)
+}
+
 /// Builds a signed v1 SOL transfer.
 ///
 /// The compute budget travels in the message's `TransactionConfig`, so the
@@ -42,15 +68,10 @@ pub fn build_v1_transfer(
     payer: &Keypair,
     recipient: &Address,
     lamports: u64,
-    blockhash: solana_hash::Hash,
+    blockhash: Hash,
     config: v1::TransactionConfig,
 ) -> Result<VersionedTransaction> {
     let instruction =
         solana_system_interface::instruction::transfer(&payer.pubkey(), recipient, lamports);
-    let message =
-        v1::Message::try_compile_with_config(&payer.pubkey(), &[instruction], blockhash, config)?;
-    Ok(VersionedTransaction::try_new(
-        VersionedMessage::V1(message),
-        &[payer],
-    )?)
+    build_v1_transaction(payer, &[instruction], blockhash, config, &[payer])
 }

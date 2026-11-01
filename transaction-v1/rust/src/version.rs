@@ -1,5 +1,6 @@
 //! Transaction message version identification.
 
+use solana_message::VersionedMessage;
 use std::fmt;
 
 /// The version of a transaction message.
@@ -18,6 +19,21 @@ impl fmt::Display for MessageVersion {
             Self::V1 => "v1",
         };
         f.write_str(name)
+    }
+}
+
+/// A message decoded off the wire carries its version in the enum variant.
+///
+/// This is the one place a version is unambiguous: JSON-RPC only reports one
+/// because the request opted in, and gRPC never does — see
+/// [`crate::grpc::message_version`].
+impl From<&VersionedMessage> for MessageVersion {
+    fn from(message: &VersionedMessage) -> Self {
+        match message {
+            VersionedMessage::Legacy(_) => Self::Legacy,
+            VersionedMessage::V0(_) => Self::V0,
+            VersionedMessage::V1(_) => Self::V1,
+        }
     }
 }
 

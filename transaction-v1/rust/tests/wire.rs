@@ -9,7 +9,7 @@ use solana_keypair::Keypair;
 use solana_message::{v1, VersionedMessage};
 use solana_signer::Signer;
 use txv1::grpc::message_version;
-use txv1::send::{build_v1_transfer, EXAMPLE_CONFIG};
+use txv1::send::{build_v1_transaction, build_v1_transfer, EXAMPLE_CONFIG};
 use txv1::version::VersionTally;
 use txv1::MessageVersion;
 use yellowstone_grpc_proto::solana::storage::confirmed_block::{Message, TransactionConfig};
@@ -160,6 +160,72 @@ fn a_v1_message_with_an_all_unset_config_is_still_v1_on_the_wire() {
     };
 
     assert_eq!(message_version(&message), MessageVersion::V1);
+}
+
+#[test]
+fn a_decoded_message_reports_the_version_of_its_variant() {
+    let payer = Keypair::new().pubkey();
+    let instruction =
+        solana_system_interface::instruction::transfer(&payer, &Address::new_unique(), 1);
+    let blockhash = Hash::new_unique();
+
+    let legacy = VersionedMessage::Legacy(solana_message::legacy::Message::new_with_blockhash(
+        std::slice::from_ref(&instruction),
+        Some(&payer),
+        &blockhash,
+    ));
+    let v0 = VersionedMessage::V0(
+        solana_message::v0::Message::try_compile(&payer, &[instruction], &[], blockhash)
+            .expect("v0 message compiles"),
+    );
+    let v1 = VersionedMessage::V1(compile(EXAMPLE_CONFIG));
+
+    assert_eq!(MessageVersion::from(&legacy), MessageVersion::Legacy);
+    assert_eq!(MessageVersion::from(&v0), MessageVersion::V0);
+    assert_eq!(MessageVersion::from(&v1), MessageVersion::V1);
+}
+
+#[test]
+fn a_v1_transaction_led_by_advance_nonce_is_recognised_as_durable() {
+    // `RpcClient::send_and_confirm_transaction` keys its expiry check on this:
+    // a durable transaction is confirmed against a fresh blockhash, because the
+    // nonce in its lifetime slot is not one. v1 moves nothing here — the
+    // advance instruction still comes first and the nonce still takes the
+    // blockhash's place.
+    let payer = Keypair::new();
+    let nonce_account = Address::new_unique();
+    let nonce = Hash::new_unique();
+    let transaction = build_v1_transaction(
+        &payer,
+        &[
+            solana_system_interface::instruction::advance_nonce_account(
+                &nonce_account,
+                &payer.pubkey(),
+            ),
+            solana_system_interface::instruction::transfer(
+                &payer.pubkey(),
+                &Address::new_unique(),
+                1,
+            ),
+        ],
+        nonce,
+        EXAMPLE_CONFIG,
+        &[&payer],
+    )
+    .expect("nonce transfer builds");
+
+    assert!(transaction.uses_durable_nonce());
+    assert_eq!(*transaction.message.recent_blockhash(), nonce);
+
+    let blockhash_only = build_v1_transfer(
+        &payer,
+        &Address::new_unique(),
+        1,
+        Hash::new_unique(),
+        EXAMPLE_CONFIG,
+    )
+    .expect("transfer builds");
+    assert!(!blockhash_only.uses_durable_nonce());
 }
 
 #[test]

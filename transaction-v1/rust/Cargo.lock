@@ -4250,6 +4250,8 @@ name = "txv1"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
+ "bincode",
  "bs58",
  "clap",
  "futures",
@@ -4260,6 +4262,7 @@ dependencies = [
  "solana-hash",
  "solana-keypair",
  "solana-message",
+ "solana-nonce",
  "solana-rpc-client",
  "solana-rpc-client-api",
  "solana-sdk-ids",
@@ -4269,6 +4272,7 @@ dependencies = [
  "solana-transaction",
  "solana-transaction-status-client-types",
  "tokio",
+ "wincode",
  "yellowstone-grpc-client",
  "yellowstone-grpc-proto",
 ]

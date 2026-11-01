@@ -1,6 +1,10 @@
 //! Offline tests for reading a compute budget across all three versions.
 
+use solana_address::Address;
+use solana_hash::Hash;
+use solana_message::{legacy, v0, v1, Instruction, VersionedMessage};
 use txv1::budget::{default_compute_unit_limit, ComputeBudget};
+use txv1::send::EXAMPLE_CONFIG;
 use yellowstone_grpc_proto::solana::storage::confirmed_block::{
     CompiledInstruction, Message, TransactionConfig,
 };
@@ -164,5 +168,149 @@ fn a_v1_message_never_falls_back_to_scanning_instructions() {
     assert_eq!(
         ComputeBudget::of_message(&message).compute_unit_limit,
         Some(20_000)
+    );
+}
+
+// The same accessor, for a message decoded off the wire rather than received
+// over gRPC.
+
+/// A ComputeBudget program instruction, as a client would compile it: one
+/// discriminant byte, then the little-endian operand.
+fn compute_budget_program_instruction(discriminant: u8, operand: &[u8]) -> Instruction {
+    let mut data = vec![discriminant];
+    data.extend_from_slice(operand);
+    Instruction::new_with_bytes(solana_sdk_ids::compute_budget::ID, &data, Vec::new())
+}
+
+fn transfer(payer: &Address) -> Instruction {
+    solana_system_interface::instruction::transfer(payer, &Address::new_unique(), 1)
+}
+
+fn legacy_message(payer: &Address, instructions: &[Instruction]) -> VersionedMessage {
+    VersionedMessage::Legacy(legacy::Message::new_with_blockhash(
+        instructions,
+        Some(payer),
+        &Hash::default(),
+    ))
+}
+
+fn v0_message(payer: &Address, instructions: &[Instruction]) -> VersionedMessage {
+    VersionedMessage::V0(
+        v0::Message::try_compile(payer, instructions, &[], Hash::default())
+            .expect("v0 message compiles"),
+    )
+}
+
+#[test]
+fn a_decoded_v1_budget_is_read_straight_off_the_config() {
+    let payer = Address::new_unique();
+    let message = v1::Message::try_compile_with_config(
+        &payer,
+        &[transfer(&payer)],
+        Hash::default(),
+        EXAMPLE_CONFIG,
+    )
+    .expect("v1 message compiles");
+
+    assert_eq!(
+        ComputeBudget::of_versioned_message(&VersionedMessage::V1(message)),
+        ComputeBudget {
+            compute_unit_limit: Some(20_000),
+            heap_size: Some(65_536),
+            loaded_accounts_data_size_limit: Some(65_536),
+            priority_fee_lamports: Some(5_000),
+        }
+    );
+}
+
+#[test]
+fn an_equivalent_budget_is_recovered_from_a_decoded_legacy_transaction() {
+    // 20,000 CU at 250,000 micro-lamports/CU is the 5,000 lamports the v1
+    // config states directly.
+    let payer = Address::new_unique();
+    let message = legacy_message(
+        &payer,
+        &[
+            transfer(&payer),
+            compute_budget_program_instruction(2, &20_000u32.to_le_bytes()),
+            compute_budget_program_instruction(3, &250_000u64.to_le_bytes()),
+        ],
+    );
+
+    assert_eq!(
+        ComputeBudget::of_versioned_message(&message),
+        ComputeBudget {
+            compute_unit_limit: Some(20_000),
+            priority_fee_lamports: Some(5_000),
+            ..ComputeBudget::default()
+        }
+    );
+}
+
+#[test]
+fn an_equivalent_budget_is_recovered_from_a_decoded_v0_transaction() {
+    let payer = Address::new_unique();
+    let message = v0_message(
+        &payer,
+        &[
+            transfer(&payer),
+            compute_budget_program_instruction(2, &20_000u32.to_le_bytes()),
+            compute_budget_program_instruction(3, &250_000u64.to_le_bytes()),
+        ],
+    );
+
+    assert_eq!(
+        ComputeBudget::of_versioned_message(&message),
+        ComputeBudget {
+            compute_unit_limit: Some(20_000),
+            priority_fee_lamports: Some(5_000),
+            ..ComputeBudget::default()
+        }
+    );
+}
+
+#[test]
+fn a_decoded_transaction_that_states_no_budget_reports_nothing_set() {
+    let payer = Address::new_unique();
+    assert_eq!(
+        ComputeBudget::of_versioned_message(&v0_message(&payer, &[transfer(&payer)])),
+        ComputeBudget::default()
+    );
+}
+
+#[test]
+fn a_decoded_price_without_a_limit_charges_the_implicit_limit() {
+    // Two instructions: the transfer and the price itself.
+    let payer = Address::new_unique();
+    let message = legacy_message(
+        &payer,
+        &[
+            transfer(&payer),
+            compute_budget_program_instruction(3, &1_000_000u64.to_le_bytes()),
+        ],
+    );
+
+    assert_eq!(
+        ComputeBudget::of_versioned_message(&message).priority_fee_lamports,
+        Some(u64::from(default_compute_unit_limit(2)))
+    );
+}
+
+#[test]
+fn a_budget_describes_what_each_absent_field_resolves_to() {
+    let described = ComputeBudget {
+        compute_unit_limit: Some(20_000),
+        ..ComputeBudget::default()
+    }
+    .describe("");
+
+    assert_eq!(
+        described.lines().collect::<Vec<_>>(),
+        [
+            "priority_fee:                    unset (0)",
+            "compute_unit_limit:              20000",
+            "loaded_accounts_data_size_limit: unset (0)",
+            "heap_size:                       unset (32KB default)",
+        ]
     );
 }
