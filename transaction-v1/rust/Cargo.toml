@@ -13,11 +13,19 @@ all = { level = "deny", priority = -1 }
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
+# A nonce account's state is bincode on chain, and `solana-account-decoder`
+# reads it the same way.
+bincode = "1"
 bs58 = "0.5"
 clap = { version = "4", features = ["derive", "env"] }
 futures = "0.3"
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+# The SDK's transaction wire codec, and what the RPC client and
+# `EncodedTransaction::decode` use. Serializing a v1 `VersionedMessage` through
+# serde instead does not produce the SIMD-0385 wire format.
+wincode = "0.5.5"
 
 # 12.6.0 is the first published version whose generated code carries
 # `Message.config` (field 7). Anything older decodes a v1 message as a v0
@@ -36,6 +44,9 @@ solana-feature-gate-interface = { version = "4.0.0", features = ["bincode"] }
 solana-hash = "4.3.0"
 solana-keypair = "3.0.0"
 solana-message = "4.4.1"
+# The `serde` feature is what makes a nonce account's `Versions` state
+# deserializable with bincode, which is how the nonce example reads it back.
+solana-nonce = { version = "3.2.0", features = ["serde"] }
 solana-rpc-client = "4.2.1"
 solana-sdk-ids = "3.0.0"
 solana-rpc-client-api = "4.2.1"

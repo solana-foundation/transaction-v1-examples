@@ -47,9 +47,9 @@ solana -u l feature status txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL
 |---|---|---|---|---|
 | Send a v1 transfer, read it back, decode the wire bytes | `just send-decode` | `just ts-send-decode` | `just py-send-decode` | `just go-send-decode` |
 | Read a block holding v1 transactions | `just get-block` | `just ts-get-block` | `just py-get-block` | `just go-get-block` |
-| Size the compute budget by simulation instead of hard-coding it | — | `just ts-estimate` | — | — |
-| Read the compute budget out of a base64 transaction of any version | — | `just ts-decode-budget` | — | — |
-| Send a v1 transfer under a durable nonce lifetime | — | `just ts-nonce` | — | — |
+| Size the compute budget by simulation instead of hard-coding it | `just estimate` | `just ts-estimate` | — | — |
+| Read the compute budget out of a base64 transaction of any version | `just decode-budget` | `just ts-decode-budget` | — | — |
+| Send a v1 transfer under a durable nonce lifetime | `just nonce` | `just ts-nonce` | — | — |
 | Send a whole Token-2022 confidential transfer in one transaction | — | `just ts-confidential-transfer` | — | — |
 | Send and read a v1 transfer through a `@solana/kit` plugin client | — | `just kp-send-decode` | — | — |
 | Send a confidential transfer through a `@solana/kit` plugin client | — | `just kp-confidential-transfer` | — | — |
@@ -106,7 +106,7 @@ legacy/v0 states a *price* in micro-lamports per compute unit; v1 states a *tota
 
 Both gRPC indexers print this normalised budget for every transaction, whatever its version.
 
-A facilitator, relayer, or simulation service has the same problem one layer up: it is handed a base64 transaction and has to price it before it knows the version. [`just ts-decode-budget`](ts/kit/src/decode-budget.ts) builds the same budget three ways and prints what comes back out of each; pass it a base64 transaction to read that one instead. It needs no validator.
+A facilitator, relayer, or simulation service has the same problem one layer up: it is handed a base64 transaction and has to price it before it knows the version. [`just decode-budget`](rust/src/bin/decode-budget.rs) and [`just ts-decode-budget`](ts/kit/src/decode-budget.ts) build the same budget three ways and print what comes back out of each; pass either a base64 transaction to read that one instead. Neither needs a validator.
 
 ## Setting a budget across versions
 
@@ -176,7 +176,7 @@ Every example reads its endpoints from the environment; the Rust and Go binaries
 | `TXV1_EXIT_AFTER_V1` | unset | stop the TypeScript or Go transaction indexer after N v1 transactions |
 | `TXV1_EXIT_AFTER_V1_BLOCKS` | unset | stop the TypeScript or Go block indexer after N blocks holding v1 |
 
-Rust flags: `--rpc-url`, `--grpc-url`, `--slot` (get-block), `--exit-after-v1` / `--exit-after-v1-blocks` (indexers). Go takes the same names single-dashed.
+Rust flags: `--rpc-url`, `--grpc-url`, `--slot` (get-block), `--exit-after-v1` / `--exit-after-v1-blocks` (indexers); decode-budget takes the base64 transaction as its one positional argument. Go takes the same names single-dashed.
 
 ## Testing
 

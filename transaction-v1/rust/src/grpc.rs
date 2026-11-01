@@ -24,31 +24,5 @@ pub fn message_version(message: &Message) -> MessageVersion {
 /// An absent field is not a default: an unset limit resolves to zero, not to
 /// the generous v0-era defaults.
 pub fn describe_config(config: &TransactionConfig, indent: &str) -> String {
-    let priority_fee = match config.priority_fee {
-        Some(lamports) => format!("{lamports} lamports (total, not micro-lamports/CU)"),
-        None => "unset (0)".to_string(),
-    };
-    [
-        format!("{indent}priority_fee:                    {priority_fee}"),
-        format!(
-            "{indent}compute_unit_limit:              {}",
-            optional_u32(config.compute_unit_limit, "0")
-        ),
-        format!(
-            "{indent}loaded_accounts_data_size_limit: {}",
-            optional_u32(config.loaded_accounts_data_size_limit, "0")
-        ),
-        format!(
-            "{indent}heap_size:                       {}",
-            optional_u32(config.heap_size, "32KB default")
-        ),
-    ]
-    .join("\n")
-}
-
-fn optional_u32(value: Option<u32>, unset_meaning: &str) -> String {
-    match value {
-        Some(value) => value.to_string(),
-        None => format!("unset ({unset_meaning})"),
-    }
+    crate::ComputeBudget::from(config).describe(indent)
 }
