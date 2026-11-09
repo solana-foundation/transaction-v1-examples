@@ -2,38 +2,7 @@
 
 Working examples for the [programmatic signer](https://www.solana-program.com/docs/programmatic-signer), Anza's replacement for durable nonce transactions, in Rust and TypeScript: signing an action with a cold key that never goes online, relaying it later from a hot key, and reading back what happened.
 
-Every example runs against a local `solana-test-validator` from Anza CLI 4.4.1 with the three programs loaded, and the whole suite is exercised in CI.
-
-## What changes
-
-A durable nonce transaction is a real transaction the cold key signs and someone sends later. A programmatic signer action is an *authorization message* the cold key signs, which a hot relayer wraps in a transaction of its own. The funds move from the cold key to a PDA derived from it, and the PDA acts whenever the cold key has authorized it to.
-
-| | durable nonce | programmatic signer |
-|---|---|---|
-| Where the funds live | at the cold key | at a PDA derived from the cold key |
-| What the cold key signs | a whole transaction: fee payer, `AdvanceNonceAccount`, the action | one authorization message; never a transaction |
-| Who pays the fee | the cold key, or a co-signer on the transaction | a hot relayer, at relay time |
-| Lifetime | the nonce value in the blockhash slot | none on the artifact; the relayer's blockhash on the outer transaction |
-| Nonce account | System program, 80 bytes, the cold key is the authority | SPL Nonce program, 72 bytes, the PDA is the authority |
-| Next nonce value | a future blockhash; unknowable at signing time | a hash of the current value and the message; known at signing time |
-| Failed execution | the nonce advances and the fee is charged | everything rolls back and the artifact stays valid |
-| Replay | rejected by the runtime's nonce check | rejected by the Executor program, `NonceMismatch` |
-| One SOL transfer, on the wire | 289 bytes | 913-byte relay transaction, holding a 433-byte authorization message, holding a 156-byte execution message |
-| One SOL transfer, compute units | about 300 | about 54,000 |
-
-A pipeline that recognises durable nonce transactions by their first instruction sees none of this. The action lands inside a `Submit` instruction to the Signer program, three CPI levels down.
-
-## What you do
-
-Moving a cold-key workflow onto the programmatic signer is five operations. Each names the function that performs it in [`rust/src/`](rust/src) and [`ts/kit/src/lib/`](ts/kit/src/lib).
-
-1. **Derive the PDA from the cold key.** Nothing to create or initialize; it is a plain System address. `signer::programmatic_signer`.
-2. **Move the funds to it.** An ordinary transfer of SOL, and of each token balance to the PDA's associated token account. Every example does this in its setup.
-3. **Create SPL nonce accounts with the PDA as authority,** one per action you want in flight; anyone can pay. `nonce::create_nonce_account`.
-4. **On the cold side, sign authorization messages.** Read the nonce value, build the action as the PDA would send it, wrap it, sign it, and hand the JSON artifact across the air gap. `signer::execution_message`, `signer::authorization_message`, `signer::sign_authorization`. The next nonce value is known now, `nonce::next_nonce`, so several actions can be signed in sequence.
-5. **On the hot side, relay.** Any funded key wraps the artifact in a v1 transaction with a fresh blockhash and sends it. `signer::relay_transaction`.
-
-Afterwards, old System nonce accounts can be closed with `WithdrawNonceAccount` to reclaim their rent; these examples leave that to the operator.
+Every example runs against a local `solana-test-validator` from Anza CLI 4.4.1 with the three programs loaded, and the whole suite is exercised in CI. What changes from a durable nonce transaction, the five operations a migration consists of, and what is still to come are in the [directory README](../README.md); this one is the Anza specifics.
 
 ## Quick start
 
@@ -62,6 +31,8 @@ Nothing is published yet: the Anza repo has no releases, the crates on crates.io
 | Sign a token withdrawal with a cold key, creating the recipient's token account on the way, and relay it from a hot key | `just token-transfer` | `just ts-token-transfer` |
 
 Source: [`rust/src/bin/`](rust/src/bin) and [`ts/kit/src/`](ts/kit/src).
+
+The five operations in the directory README map onto the shared modules in [`rust/src/`](rust/src) and [`ts/kit/src/lib/`](ts/kit/src/lib): derive the PDA with `signer::programmatic_signer`; create a nonce account with `nonce::create_nonce_account`; on the cold side build and sign with `signer::execution_message`, `signer::authorization_message`, and `signer::sign_authorization`, predicting the successor with `nonce::next_nonce`; on the hot side relay with `signer::relay_transaction`. Moving the funds is an ordinary transfer, done in each example's setup.
 
 `sign-relay` sends the same transfer twice: first as a durable nonce transaction, then through the programmatic signer, printing each layer as it goes. Between signing and relaying it waits for a blockhash captured at signing time to expire, about a minute on a local validator, which is the shortest proof that the artifact outlives one. Set `PSIGNER_SKIP_EXPIRY=true` to skip the wait.
 
@@ -108,8 +79,6 @@ The relayer cannot change the amount, the recipient, or the nonce without invali
 **Unset v1 limits are zero.** The relay transaction is v1, so its compute unit limit and loaded-accounts limit have to be stated. The examples request 200,000 compute units and 4 MB; a SOL transfer uses about 54,000, and the three programs together load about 500 KB.
 
 **The PDA cannot pay.** It is the fee payer of the execution message only as a placeholder. A real fee payer, funded and online, has to sign the relay transaction. In the Anza CLI's terms that is the configured keypair; here it is a freshly airdropped key.
-
-**A failed action stays executable.** If the action fails, the whole relay transaction rolls back, nonce included, and the same artifact lands later once conditions change. A durable nonce transaction burns its nonce on failure. These examples do not exercise this; a deadline instruction in the execution message is the mitigation.
 
 **Kit and Rust compile the same instructions into different bytes.** Both order a compiled message's accounts by privilege, but within a class `@solana/kit` sorts addresses as strings, with an English collator, and the Rust compiler sorts them as bytes. With one account per class, as in a SOL transfer, the two agree; a token transfer has several per class and they do not. Both messages are valid and the Executor runs either, but the signature, the artifact, and the next nonce all differ, so a chain signed in one language has to be checked by decoding its instructions, not by recompiling them. The TypeScript wire test for the token message compares instructions, not bytes, for this reason.
 
@@ -177,5 +146,4 @@ Runnable examples are separate from the code they share. A file directly under `
 
 - [Programmatic Signer docs](https://www.solana-program.com/docs/programmatic-signer)
 - [solana-program/ed25519-programmatic-signer](https://github.com/solana-program/ed25519-programmatic-signer)
-- [Nonce Replacement Meta-Proposal, SIMD discussion #456](https://github.com/solana-foundation/solana-improvement-documents/discussions/456)
 - [Woody4618/nonce-replacement-demo](https://github.com/Woody4618/nonce-replacement-demo), the same flow driven through the Anza CLI on devnet
