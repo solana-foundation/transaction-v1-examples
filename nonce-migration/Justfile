@@ -1,0 +1,22 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+# Each backend is self-contained; run `just` inside anza/ for its full recipe list.
+
+_default:
+    @just --list
+
+# Everything CI runs for every backend, minus the live tests.
+check:
+    cd anza && just check
+
+# Offline tests for every backend.
+test:
+    cd anza && just test
+
+# Every test for every backend, each against its own validator.
+test-live:
+    cd anza && just test-live
+
+# Run every example of every backend end to end.
+demo:
+    cd anza && just demo

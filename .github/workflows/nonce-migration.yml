@@ -1,0 +1,121 @@
+name: nonce-migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - nonce-migration/**
+      - .github/workflows/nonce-migration.yml
+  pull_request:
+    paths:
+      - nonce-migration/**
+      - .github/workflows/nonce-migration.yml
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: nonce-migration/anza
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  SOLANA_VERSION: 4.4.1
+
+jobs:
+  check:
+    name: Format, lint, typecheck, offline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # The runner's rustup honours nonce-migration/anza/rust/rust-toolchain.toml,
+      # installing the pinned channel and its clippy/rustfmt components on
+      # first use.
+      - run: rustup show
+        working-directory: nonce-migration/anza/rust
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: nonce-migration/anza/rust
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          package_json_file: nonce-migration/anza/ts/package.json
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: nonce-migration/anza/ts/pnpm-lock.yaml
+
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
+
+      - name: Install TypeScript dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: nonce-migration/anza/ts
+
+      - run: just fmt-check
+      - run: just lint
+      - run: just typecheck
+      - run: just test
+
+  live:
+    name: Live tests against a validator with the programs loaded
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - run: rustup show
+        working-directory: nonce-migration/anza/rust
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            nonce-migration/anza/rust
+            nonce-migration/anza/.local/eps
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          package_json_file: nonce-migration/anza/ts/package.json
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: nonce-migration/anza/ts/pnpm-lock.yaml
+
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
+
+      - name: Install TypeScript dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: nonce-migration/anza/ts
+
+      # solana-test-validator activates every feature at genesis, so transaction
+      # v1 is live from slot 0 and the relay transaction can be v1.
+      - name: Install the Anza CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Verify the CLI version
+        run: solana --version
+
+      # Builds the Signer, Executor, and Nonce programs from the pinned commit,
+      # the same one the clients depend on.
+      - name: Build the programs
+        run: just setup-programs
+
+      - name: Run the live tests
+        run: just test-live
+
+      - name: Upload the validator log
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: validator-log
+          path: nonce-migration/anza/.local/validator.log
