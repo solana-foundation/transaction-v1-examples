@@ -27,6 +27,12 @@ NAMES=(spl_nonce_program spl_ed25519_signer_program spl_message_executor_program
 IDS=(Noncediea1fH12usShuQAz28UhgAeuE5Maf32LsMUQB EdSigVfK1DkeMrjFNDMjwfQaJPhPTtX7jW8uPv3oKEgN ExecxgyHYsAXB4c5dZodV1zJZ9hqfsDCYkRDRATrpkFR)
 DIRS=(nonce/program signer/program executor/program)
 
+# The pinned commit builds with Anza CLI 3.1, whose cargo build-sbf defaults to
+# platform-tools v1.52 and SBPF v0. The CLI this directory installs defaults to
+# newer platform-tools and SBPF v3, under which the Signer program fails to
+# link, so the build states the toolchain the pinned commit was written for.
+BUILD_ARGS=(--tools-version v1.52 --arch v0)
+
 all_present() {
     for name in "${NAMES[@]}"; do
         [[ -s "$PROGRAMS/$name.so" ]] || return 1
@@ -48,7 +54,7 @@ case "$MODE" in
         git -C "$LOCAL/eps" checkout --quiet "$COMMIT"
         for i in "${!NAMES[@]}"; do
             echo "building ${NAMES[$i]} from ${DIRS[$i]} at ${COMMIT:0:7}"
-            cargo build-sbf --manifest-path "$LOCAL/eps/${DIRS[$i]}/Cargo.toml" --sbf-out-dir "$PROGRAMS"
+            cargo build-sbf "${BUILD_ARGS[@]}" --manifest-path "$LOCAL/eps/${DIRS[$i]}/Cargo.toml" --sbf-out-dir "$PROGRAMS"
         done
         ;;
     dump)
