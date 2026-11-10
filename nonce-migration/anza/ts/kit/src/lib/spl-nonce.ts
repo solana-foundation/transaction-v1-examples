@@ -62,7 +62,7 @@ export async function createNonceAccount(clients: Clients, payer: KeyPairSigner,
  * JavaScript client has no helper for this yet; the Rust one does.
  *
  * A System nonce advances to an unpredictable future blockhash. An SPL nonce
- * advances to a hash of its current value and the executed message, so the
+ * advances to a hash of its current value and the message that ran, so the
  * signer knows the successor before anything is sent. That is what lets a
  * chain of actions be signed up front, each valid only after the one before.
  *

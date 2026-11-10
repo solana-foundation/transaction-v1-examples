@@ -25,9 +25,9 @@ Today a cold key owns the funds and signs a durable nonce transaction that anyon
 | Lifetime | the nonce value in the blockhash slot | none on the artifact; the relayer's blockhash on the outer transaction |
 | Nonce account | System program, 80 bytes, the cold key is the authority | SPL Nonce program, 72 bytes, the PDA is the authority |
 | Next nonce value | a future blockhash; unknowable at signing time | a hash of the current value and the message; known at signing time |
-| Failed execution | the nonce advances and the fee is charged | everything rolls back and the artifact stays valid |
+| Failed action | the nonce advances and the fee is charged | everything rolls back and the artifact stays valid |
 | Replay | rejected by the runtime's nonce check | rejected by the Executor program, `NonceMismatch` |
-| One SOL transfer, on the wire | 289 bytes | 913-byte relay transaction, holding a 433-byte authorization message, holding a 156-byte execution message |
+| One SOL transfer, on the wire | 303 bytes as a v1 transaction, 289 as a legacy one | 913-byte relay transaction, holding a 433-byte authorization message, holding a 156-byte execution message |
 | One SOL transfer, compute units | about 300 | about 54,000 |
 
 A pipeline that recognises durable nonce transactions by their first instruction sees none of this. The action lands inside an instruction to the signer program, three CPI levels down. The Vector column is added when that backend lands.
@@ -46,7 +46,7 @@ Afterwards, old System nonce accounts can be closed with `WithdrawNonceAccount` 
 
 ## Before you move funds
 
-- **A failed action stays executable.** If the action fails, the whole relay rolls back, nonce included, and the same artifact lands later once conditions change. A durable nonce transaction burns its nonce on failure. A deadline instruction in the action is the mitigation.
+- **A failed action can be relayed again.** If the action fails, the whole relay rolls back, nonce included, and the same artifact lands later once conditions change. A durable nonce transaction burns its nonce on failure. A deadline instruction in the action is the mitigation.
 - **The relayer chooses when, with which blockhash, from which fee payer, and with what compute budget.** It cannot change the action, the amount, the recipient, or the nonce without invalidating the signature.
 - **Nothing is released yet.** The Anza programs are on devnet only, under one upgrade key, unaudited; the crates and npm package are placeholders. These examples pin one commit and build the programs from it. Do not pre-sign against devnet addresses expecting them to hold.
 

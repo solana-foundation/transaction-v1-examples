@@ -16,14 +16,14 @@ use psigner::cluster::{
     assert_programs_deployed, client, compute_units, funded_keypair, send_transaction,
     wait_for_blockhash_expiry,
 };
-use psigner::legacy::{
-    create_system_nonce_account, fetch_system_nonce, sign_durable_nonce_transfer,
+use psigner::durable_nonce::{
+    create_durable_nonce_account, fetch_durable_nonce, sign_durable_nonce_transfer,
 };
-use psigner::nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::signer::{
-    authorization_message, execution_message, programmatic_signer, relay_transaction,
+    authorization_message, execution_message, programmatic_signer_address, relay_transaction,
     sign_authorization, Artifact,
 };
+use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::DEFAULT_RPC_URL;
 use solana_commitment_config::CommitmentConfig;
 use solana_keypair::Keypair;
@@ -56,17 +56,17 @@ fn main() -> Result<()> {
     // so it has to be funded, and it signs a whole transaction.
     println!("== before: a System durable nonce transaction ==");
     let cold = funded_keypair(&client, 1_000_000_000)?;
-    let system_nonce_account = create_system_nonce_account(&client, &cold)?;
-    let system_nonce = fetch_system_nonce(&client, &system_nonce_account)?;
+    let durable_nonce_account = create_durable_nonce_account(&client, &cold)?;
+    let durable_nonce = fetch_durable_nonce(&client, &durable_nonce_account)?;
     let durable = sign_durable_nonce_transfer(
         &cold,
-        &system_nonce_account,
-        system_nonce,
+        &durable_nonce_account,
+        durable_nonce,
         &recipient,
         AMOUNT,
     )?;
-    println!("  nonce account: {system_nonce_account}");
-    println!("  nonce:         {system_nonce}");
+    println!("  nonce account: {durable_nonce_account}");
+    println!("  nonce:         {durable_nonce}");
     println!(
         "  signed by:     {} (the cold key, which also pays)",
         cold.pubkey()
@@ -74,14 +74,14 @@ fn main() -> Result<()> {
     println!("  size:          {} bytes", versioned_size(&durable));
     let signature = client.send_and_confirm_transaction(&durable)?;
     println!("  landed:        {signature}");
-    let advanced = fetch_system_nonce(&client, &system_nonce_account)?;
+    let advanced = fetch_durable_nonce(&client, &durable_nonce_account)?;
     println!("  nonce after:   {advanced} (a future blockhash; not knowable at signing time)");
 
     // The replacement. The cold key is never funded and never signs a
     // transaction. A PDA derived from it holds the funds instead.
     println!("\n== after: a programmatic signer authorization ==");
     let authority = Keypair::new();
-    let pda = programmatic_signer(&authority.pubkey());
+    let pda = programmatic_signer_address(&authority.pubkey());
     println!(
         "  authority: {} (cold; holds nothing, signs one message)",
         authority.pubkey()

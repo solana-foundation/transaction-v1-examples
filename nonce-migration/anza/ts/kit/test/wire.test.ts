@@ -15,8 +15,8 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { MESSAGE_EXECUTOR_PROGRAM_ADDRESS } from '../src/client';
-import { nextNonce } from '../src/lib/nonce';
-import { authorizationMessage, executionMessage, programmaticSigner, transferFromPda } from '../src/lib/signer';
+import { authorizationMessage, executionMessage, programmaticSignerAddress, transferFromPda } from '../src/lib/signer';
+import { nextNonce } from '../src/lib/spl-nonce';
 import { associatedTokenAddress, transferToAta } from '../src/lib/token';
 import {
     AMOUNT,
@@ -37,7 +37,7 @@ const base64 = getBase64Decoder();
 
 async function fixture() {
     const authority = await authorityKeyPair();
-    const pda = await programmaticSigner(authority.address);
+    const pda = await programmaticSignerAddress(authority.address);
     const execution = executionMessage(pda, [transferFromPda(pda, RECIPIENT, AMOUNT)], NONCE);
     const authorization = authorizationMessage(execution, NONCE_ACCOUNT, pda, authority.address);
     return { authority, authorization, execution, pda };

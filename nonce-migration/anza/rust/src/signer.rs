@@ -27,7 +27,7 @@ use spl_ed25519_signer_client::ProgrammaticSigner;
 /// Nothing is created on chain. It is a plain System-owned address that holds
 /// SOL and owns token accounts like any wallet, and the Signer program promotes
 /// it to a signer whenever `authority` has signed an authorization for it.
-pub fn programmatic_signer(authority: &Address) -> Address {
+pub fn programmatic_signer_address(authority: &Address) -> Address {
     ProgrammaticSigner::derive_address(&spl_ed25519_signer_client::ID, authority)
 }
 
@@ -46,7 +46,7 @@ pub const RELAY_CONFIG: v1::TransactionConfig = v1::TransactionConfig::empty()
 /// The PDA is the fee payer and signer, which it could never be in a real
 /// transaction; the executor fills those roles by CPI. The blockhash slot holds
 /// the nonce value instead of a blockhash, and the transaction config is empty
-/// because the message is never executed at the top level.
+/// because the message never runs as a transaction of its own.
 pub fn execution_message(
     pda: &Address,
     instructions: &[Instruction],
@@ -103,7 +103,7 @@ pub struct Artifact {
     pub authorization_message: String,
     /// One signature per authority, as `address=signature` pairs.
     pub signatures: Vec<String>,
-    /// The nonce value the execution consumes.
+    /// The nonce value the action consumes.
     pub consumed_nonce: String,
     /// The nonce value the account will hold afterwards.
     pub next_nonce: String,

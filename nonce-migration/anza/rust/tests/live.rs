@@ -6,11 +6,11 @@
 
 use anyhow::Result;
 use psigner::cluster::{assert_programs_deployed, client, funded_keypair, send_transaction};
-use psigner::nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::signer::{
-    authorization_message, execution_message, programmatic_signer, relay_transaction,
+    authorization_message, execution_message, programmatic_signer_address, relay_transaction,
     sign_authorization,
 };
+use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::token::{
     associated_token_address, create_mint, fetch_balance, mint_to_ata, transfer_to_ata,
 };
@@ -40,7 +40,7 @@ fn setup() -> Result<Setup> {
     assert_programs_deployed(&client)?;
     let relayer = funded_keypair(&client, 5_000_000_000)?;
     let authority = Keypair::new();
-    let pda = programmatic_signer(&authority.pubkey());
+    let pda = programmatic_signer_address(&authority.pubkey());
     send_transaction(
         &client,
         &relayer,

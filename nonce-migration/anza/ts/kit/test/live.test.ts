@@ -18,17 +18,17 @@ import { describe, expect, it } from 'vitest';
 
 import { fetchNonce } from '../src/client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions } from '../src/lib/cluster';
-import { createNonceAccount, nextNonce } from '../src/lib/nonce';
 import { type Clients, createClients } from '../src/lib/rpc';
 import {
     authorizationMessage,
     executionMessage,
-    programmaticSigner,
+    programmaticSignerAddress,
     relayTransaction,
     sendRelay,
     signAuthorization,
     transferFromPda,
 } from '../src/lib/signer';
+import { createNonceAccount, nextNonce } from '../src/lib/spl-nonce';
 import { associatedTokenAddress, createMint, fetchBalance, mintToAta, transferToAta } from '../src/lib/token';
 
 const live = process.env.PSIGNER_LIVE === '1';
@@ -40,7 +40,7 @@ const live = process.env.PSIGNER_LIVE === '1';
 async function setup(clients: Clients) {
     const relayer = await fundedSigner(clients, 5_000_000_000n);
     const authority = await generateKeyPairSigner();
-    const pda = await programmaticSigner(authority.address);
+    const pda = await programmaticSignerAddress(authority.address);
     await sendTransactions(
         clients,
         relayer,

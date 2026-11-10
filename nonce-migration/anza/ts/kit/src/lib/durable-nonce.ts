@@ -43,7 +43,7 @@ import { sendTransactions } from './cluster';
 import type { Clients } from './rpc';
 
 /** Creates a System nonce account whose authority is `cold`, paid for by `cold`. */
-export async function createSystemNonceAccount(clients: Clients, cold: KeyPairSigner): Promise<Address> {
+export async function createDurableNonceAccount(clients: Clients, cold: KeyPairSigner): Promise<Address> {
     const nonceAccount = await generateKeyPairSigner();
     const rent = await clients.rpc.getMinimumBalanceForRentExemption(BigInt(getNonceSize())).send();
     await sendTransactions(
@@ -67,7 +67,7 @@ export async function createSystemNonceAccount(clients: Clients, cold: KeyPairSi
 }
 
 /** Reads the value a System nonce account currently holds. */
-export async function fetchSystemNonce(rpc: Clients['rpc'], nonceAccount: Address): Promise<Nonce> {
+export async function fetchDurableNonce(rpc: Clients['rpc'], nonceAccount: Address): Promise<Nonce> {
     const { data } = await fetchSystemNonceAccount(rpc, nonceAccount, { commitment: 'confirmed' });
     return data.blockhash as string as Nonce;
 }

@@ -10,11 +10,11 @@ use clap::Parser;
 use psigner::cluster::{
     assert_programs_deployed, client, compute_units, funded_keypair, send_transaction,
 };
-use psigner::nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::signer::{
-    authorization_message, execution_message, programmatic_signer, relay_transaction,
+    authorization_message, execution_message, programmatic_signer_address, relay_transaction,
     sign_authorization, Artifact,
 };
+use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::token::{
     associated_token_address, create_mint, fetch_balance, mint_to_ata, transfer_to_ata, ui_amount,
 };
@@ -42,7 +42,7 @@ fn main() -> Result<()> {
 
     let relayer = funded_keypair(&client, 5_000_000_000)?;
     let authority = Keypair::new();
-    let pda = programmatic_signer(&authority.pubkey());
+    let pda = programmatic_signer_address(&authority.pubkey());
     let recipient = Keypair::new().pubkey();
 
     println!("== setup: the PDA holds 1,000 tokens ==");

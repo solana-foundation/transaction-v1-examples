@@ -12,17 +12,17 @@ import { generateKeyPairSigner, lamports, singleInstructionPlan } from '@solana/
 
 import { fetchNonce } from './client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions } from './lib/cluster';
-import { createNonceAccount, nextNonce } from './lib/nonce';
 import { createClients, json } from './lib/rpc';
 import {
     artifact,
     authorizationMessage,
     executionMessage,
-    programmaticSigner,
+    programmaticSignerAddress,
     relayTransaction,
     sendRelay,
     signAuthorization,
 } from './lib/signer';
+import { createNonceAccount, nextNonce } from './lib/spl-nonce';
 import { associatedTokenAddress, createMint, fetchBalance, mintToAta, uiAmount, transferToAta } from './lib/token';
 
 /** 1,000 tokens at six decimals: what the PDA holds. */
@@ -36,7 +36,7 @@ await assertProgramsDeployed(clients.rpc);
 
 const relayer = await fundedSigner(clients, 5_000_000_000n);
 const authority = await generateKeyPairSigner();
-const pda = await programmaticSigner(authority.address);
+const pda = await programmaticSignerAddress(authority.address);
 const recipient = (await generateKeyPairSigner()).address;
 
 console.log('== setup: the PDA holds 1,000 tokens ==');

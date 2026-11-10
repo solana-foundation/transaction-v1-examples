@@ -4,6 +4,15 @@ Working examples for the [programmatic signer](https://www.solana-program.com/do
 
 Every example runs against a local `solana-test-validator` from Anza CLI 4.4.1 with the three programs loaded, and the whole suite is exercised in CI. What changes from a durable nonce transaction, the five operations a migration consists of, and what is still to come are in the [directory README](../README.md); this one is the Anza specifics.
 
+## Terms
+
+- **Durable nonce**: a System program nonce account and the transaction that consumes it. What you have today.
+- **SPL nonce**: an account of the new SPL Nonce program, holding the value an action consumes.
+- **Execution message**: the action, as the PDA would send it.
+- **Authorization message**: what the cold key signs; it wraps the execution message.
+
+The names are Anza's, as its docs and CLI use them. "Run" below means an action taking effect; "execute" is kept for the `Execute` instruction and the Executor program.
+
 ## Quick start
 
 ```sh
@@ -32,7 +41,7 @@ Nothing is published yet: the Anza repo has no releases, the crates on crates.io
 
 Source: [`rust/src/bin/`](rust/src/bin) and [`ts/kit/src/`](ts/kit/src).
 
-The five operations in the directory README map onto the shared modules in [`rust/src/`](rust/src) and [`ts/kit/src/lib/`](ts/kit/src/lib): derive the PDA with `signer::programmatic_signer`; create a nonce account with `nonce::create_nonce_account`; on the cold side build and sign with `signer::execution_message`, `signer::authorization_message`, and `signer::sign_authorization`, predicting the successor with `nonce::next_nonce`; on the hot side relay with `signer::relay_transaction`. Moving the funds is an ordinary transfer, done in each example's setup.
+The five operations in the directory README map onto the shared modules in [`rust/src/`](rust/src) and [`ts/kit/src/lib/`](ts/kit/src/lib): derive the PDA with `signer::programmatic_signer_address`; create a nonce account with `spl_nonce::create_nonce_account`; on the cold side build and sign with `signer::execution_message`, `signer::authorization_message`, and `signer::sign_authorization`, predicting the successor with `spl_nonce::next_nonce`; on the hot side relay with `signer::relay_transaction`. Moving the funds is an ordinary transfer, done in each example's setup.
 
 `sign-relay` sends the same transfer twice: first as a durable nonce transaction, then through the programmatic signer, printing each layer as it goes. Between signing and relaying it waits for a blockhash captured at signing time to expire, about a minute on a local validator, which is the shortest proof that the artifact outlives one. Set `PSIGNER_SKIP_EXPIRY=true` to skip the wait.
 
@@ -86,7 +95,7 @@ The relayer cannot change the amount, the recipient, or the nonce without invali
 
 **The Anza CLI dumps legacy messages.** `solana transfer --sign-only --dump-transaction-message` emits a legacy message and the Executor accepts only v1, so a CLI-built action has to be recompiled before signing. The examples build the execution message directly instead.
 
-**`@solana-program/ed25519-programmatic-signer` is not on npm.** [`scripts/vendor-ts-client.sh`](scripts/vendor-ts-client.sh) copies the generated `@solana/kit` client out of the pinned commit into [`ts/kit/src/client/`](ts/kit/src/client), the way `transaction-v1` checks in generated protobuf bindings. The generated client has instruction builders and account decoders but no helper for the authorization message, the next nonce, or creating a nonce account, which the Rust client crates do have; [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) and [`ts/kit/src/lib/nonce.ts`](ts/kit/src/lib/nonce.ts) fill those gaps with kit calls, and [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) checks the result against the Rust client crate.
+**`@solana-program/ed25519-programmatic-signer` is not on npm.** [`scripts/vendor-ts-client.sh`](scripts/vendor-ts-client.sh) copies the generated `@solana/kit` client out of the pinned commit into [`ts/kit/src/client/`](ts/kit/src/client), the way `transaction-v1` checks in generated protobuf bindings. The generated client has instruction builders and account decoders but no helper for the authorization message, the next nonce, or creating a nonce account, which the Rust client crates do have; [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) and [`ts/kit/src/lib/spl-nonce.ts`](ts/kit/src/lib/spl-nonce.ts) fill those gaps with kit calls, and [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) checks the result against the Rust client crate.
 
 ## Version requirements
 
@@ -125,7 +134,7 @@ just test-live  # everything, against a validator started for the run
 just check      # what CI runs on every PR, minus the live tests
 ```
 
-The offline tests in both languages share one set of fixtures, frozen from the Anza client crate by [`rust/tests/wire.rs`](rust/tests/wire.rs), so the TypeScript port of the authorization message is checked byte for byte. Live tests relay a cold-signed transfer, assert the nonce advanced to the predicted value, and assert that a replay and an edited message are both rejected; and relay a cold-signed token withdrawal, asserting the recipient's account was created and filled and the nonce advanced as predicted.
+The offline tests in both languages share one set of fixtures, frozen from the Anza client crate by [`rust/tests/wire.rs`](rust/tests/wire.rs), so the TypeScript messages are checked against the Rust client crate's, instruction for instruction. Live tests relay a cold-signed transfer, assert the nonce advanced to the predicted value, and assert that a replay and an edited message are both rejected; and relay a cold-signed token withdrawal, asserting the recipient's account was created and filled and the nonce advanced as predicted.
 
 ## Layout
 
@@ -140,7 +149,7 @@ ts/kit/test/          offline and live tests
 scripts/              validator, program build, and client vendoring
 ```
 
-Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects, funds, and checks the programs are deployed; `nonce` creates and reads SPL nonce accounts and predicts the next value; `signer` builds, signs, and relays the three layers; `token` creates a mint and token accounts, reads balances, and builds the PDA's withdrawal; `legacy` is the durable nonce flow for comparison.
+Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects, funds, sends setup transactions, and checks the programs are deployed; `spl_nonce` (`spl-nonce` in TypeScript) creates and reads SPL nonce accounts and predicts the next value; `signer` builds, signs, and relays the three layers; `token` creates a mint and token accounts, reads balances, and builds the PDA's withdrawal; `durable_nonce` (`durable-nonce`) is the durable nonce flow for comparison.
 
 ## Additional resources
 

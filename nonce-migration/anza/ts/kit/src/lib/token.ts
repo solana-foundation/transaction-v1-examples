@@ -104,7 +104,7 @@ export function uiAmount(amount: bigint): string {
  * message embeds instructions, so the plan is flattened back into them. The
  * helper wants a signer wherever a key would sign, and the PDA has no key. A
  * noop signer carries its address and the signer role without ever producing
- * a signature; the Signer program supplies that at execution time.
+ * a signature; the Signer program supplies that when the action runs.
  */
 export async function transferToAta(
     mint: Address,

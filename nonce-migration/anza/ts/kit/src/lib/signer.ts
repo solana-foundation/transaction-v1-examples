@@ -56,7 +56,7 @@ import type { Clients } from './rpc';
  * SOL and owns token accounts like any wallet, and the Signer program promotes
  * it to a signer whenever `authority` has signed an authorization for it.
  */
-export async function programmaticSigner(authority: Address): Promise<Address> {
+export async function programmaticSignerAddress(authority: Address): Promise<Address> {
     const [address] = await findProgrammaticSignerPda({ authority });
     return address;
 }
@@ -80,7 +80,7 @@ export const RELAY_CONFIG: V1TransactionConfig = {
  * `getTransferSolInstruction` wants a signer for the source, and the PDA has
  * no key. A noop signer carries its address and the signer role without ever
  * producing a signature; inside the execution message that role is all that
- * matters, and the Signer program makes it true at execution time.
+ * matters, and the Signer program makes it true when the action runs.
  */
 export function transferFromPda(pda: Address, destination: Address, amount: bigint): Instruction {
     return getTransferSolInstruction({ amount, destination, source: createNoopSigner(pda) });
@@ -99,7 +99,7 @@ const lifetime = (value: string) => ({ blockhash: value as Blockhash, lastValidB
  * The PDA is the fee payer and signer, which it could never be in a real
  * transaction; the executor fills those roles by CPI. The blockhash slot holds
  * the nonce value, and no transaction config is set because the message is
- * never executed at the top level.
+ * never runs as a transaction of its own.
  */
 export function executionMessage(pda: Address, instructions: Instruction[], nonce: Address): ReadonlyUint8Array {
     const message = pipe(
@@ -171,7 +171,7 @@ export type Artifact = {
     authorizationMessage: string;
     /** One signature per authority, as `address=signature` pairs. */
     signatures: string[];
-    /** The nonce value the execution consumes. */
+    /** The nonce value the action consumes. */
     consumedNonce: Address;
     /** The nonce value the account will hold afterwards. */
     nextNonce: Address;

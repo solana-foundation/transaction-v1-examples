@@ -18,7 +18,14 @@ use solana_transaction_status_client_types::UiTransactionEncoding;
 use std::thread::sleep;
 use std::time::Duration;
 
-use crate::signer::RELAY_CONFIG;
+/// The budget every setup transaction requests.
+///
+/// Unset v1 limits are zero, so each transaction states them. The largest
+/// setup step, minting into a new associated token account, costs about
+/// 30,000 compute units and loads the Token and Associated Token programs.
+const SETUP_CONFIG: v1::TransactionConfig = v1::TransactionConfig::empty()
+    .with_compute_unit_limit(100_000)
+    .with_loaded_accounts_data_size_limit(1024 * 1024);
 
 /// The three programs the examples call, with the names their crates use.
 pub const PROGRAMS: [(&str, Address); 3] = [
@@ -70,9 +77,6 @@ pub fn funded_keypair(client: &RpcClient, lamports: u64) -> Result<Keypair> {
 /// Sends `instructions` in one v1 transaction paid by `payer`, signed by
 /// `signers`, and waits for it to confirm. For setup steps that are not the
 /// point of an example.
-///
-/// Unset v1 limits are zero, so every transaction states them; the relay's
-/// budget is more than any setup step needs.
 pub fn send_transaction(
     client: &RpcClient,
     payer: &Keypair,
@@ -83,7 +87,7 @@ pub fn send_transaction(
         &payer.pubkey(),
         instructions,
         client.get_latest_blockhash()?,
-        RELAY_CONFIG,
+        SETUP_CONFIG,
     )
     .context("failed to compile the transaction")?;
     let transaction = VersionedTransaction::try_new(VersionedMessage::V1(message), signers)?;

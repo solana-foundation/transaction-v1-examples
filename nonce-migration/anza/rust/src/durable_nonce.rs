@@ -19,7 +19,7 @@ use solana_transaction::versioned::VersionedTransaction;
 use crate::cluster::send_transaction;
 
 /// Creates a System nonce account whose authority is `cold`, paid for by `cold`.
-pub fn create_system_nonce_account(client: &RpcClient, cold: &Keypair) -> Result<Address> {
+pub fn create_durable_nonce_account(client: &RpcClient, cold: &Keypair) -> Result<Address> {
     let nonce_account = Keypair::new();
     let rent = client.get_minimum_balance_for_rent_exemption(solana_nonce::state::State::size())?;
     let instructions = system_instruction::create_nonce_account(
@@ -34,7 +34,7 @@ pub fn create_system_nonce_account(client: &RpcClient, cold: &Keypair) -> Result
 }
 
 /// Reads the value a System nonce account currently holds.
-pub fn fetch_system_nonce(client: &RpcClient, nonce_account: &Address) -> Result<Hash> {
+pub fn fetch_durable_nonce(client: &RpcClient, nonce_account: &Address) -> Result<Hash> {
     let account = client.get_account(nonce_account)?;
     let data = data_from_account(&account).context("not a System nonce account")?;
     Ok(data.durable_nonce.as_hash().to_owned())

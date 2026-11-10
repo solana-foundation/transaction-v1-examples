@@ -27,24 +27,24 @@ import {
 import { fetchNonce } from './client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions, waitForBlockhashExpiry } from './lib/cluster';
 import {
-    createSystemNonceAccount,
-    fetchSystemNonce,
+    createDurableNonceAccount,
+    fetchDurableNonce,
     sendDurableNonceTransaction,
     signDurableNonceTransfer,
-} from './lib/legacy';
-import { createNonceAccount, nextNonce } from './lib/nonce';
+} from './lib/durable-nonce';
 import { createClients, json } from './lib/rpc';
 import {
     artifact,
     authorizationMessage,
     executionMessage,
-    programmaticSigner,
+    programmaticSignerAddress,
     relayTransaction,
     sendRelay,
     signAuthorization,
     signersOf,
     transferFromPda,
 } from './lib/signer';
+import { createNonceAccount, nextNonce } from './lib/spl-nonce';
 
 const AMOUNT = 10_000_000n;
 
@@ -59,23 +59,23 @@ const recipient = (await generateKeyPairSigner()).address;
 // it has to be funded, and it signs a whole transaction.
 console.log('== before: a System durable nonce transaction ==');
 const cold = await fundedSigner(clients, 1_000_000_000n);
-const systemNonceAccount = await createSystemNonceAccount(clients, cold);
-const systemNonce = await fetchSystemNonce(clients.rpc, systemNonceAccount);
-const durable = await signDurableNonceTransfer(cold, systemNonceAccount, systemNonce, recipient, AMOUNT);
-console.log(`  nonce account: ${systemNonceAccount}`);
-console.log(`  nonce:         ${systemNonce}`);
+const durableNonceAccount = await createDurableNonceAccount(clients, cold);
+const durableNonce = await fetchDurableNonce(clients.rpc, durableNonceAccount);
+const durable = await signDurableNonceTransfer(cold, durableNonceAccount, durableNonce, recipient, AMOUNT);
+console.log(`  nonce account: ${durableNonceAccount}`);
+console.log(`  nonce:         ${durableNonce}`);
 console.log(`  signed by:     ${json(signersOf(durable))} (the cold key, which also pays)`);
 console.log(`  size:          ${getTransactionSize(durable)} bytes`);
 console.log(`  landed:        ${await sendDurableNonceTransaction(clients, durable)}`);
 console.log(
-    `  nonce after:   ${await fetchSystemNonce(clients.rpc, systemNonceAccount)} (a future blockhash; not knowable at signing time)`,
+    `  nonce after:   ${await fetchDurableNonce(clients.rpc, durableNonceAccount)} (a future blockhash; not knowable at signing time)`,
 );
 
 // The replacement. The cold key is never funded and never signs a transaction.
 // A PDA derived from it holds the funds instead.
 console.log('\n== after: a programmatic signer authorization ==');
 const authority = await generateKeyPairSigner();
-const pda = await programmaticSigner(authority.address);
+const pda = await programmaticSignerAddress(authority.address);
 console.log(`  authority: ${authority.address} (cold; holds nothing, signs one message)`);
 console.log(`  pda:       ${pda} (holds the funds; nothing to create)`);
 

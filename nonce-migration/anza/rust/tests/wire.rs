@@ -5,10 +5,10 @@
 //! the Anza client crate. Run with `--nocapture` to print fresh values.
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use psigner::nonce::next_nonce;
 use psigner::signer::{
-    authorization_message, execution_message, programmatic_signer, sign_authorization,
+    authorization_message, execution_message, programmatic_signer_address, sign_authorization,
 };
+use psigner::spl_nonce::next_nonce;
 use psigner::token::{associated_token_address, transfer_to_ata};
 use solana_address::Address;
 use solana_hash::Hash;
@@ -37,7 +37,7 @@ const EXPECTED_TOKEN_EXECUTION_MESSAGE: &str = "gQEABQAAAAAEBAQEBAQEBAQEBAQEBAQE
 
 fn fixture() -> (Keypair, Address, v1::Message, v1::Message) {
     let authority = Keypair::new_from_array(AUTHORITY_SEED);
-    let pda = programmatic_signer(&authority.pubkey());
+    let pda = programmatic_signer_address(&authority.pubkey());
     let transfer = system_instruction::transfer(&pda, &RECIPIENT, AMOUNT);
     let execution = execution_message(&pda, &[transfer], NONCE).unwrap();
     let authorization =
