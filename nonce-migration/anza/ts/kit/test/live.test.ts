@@ -15,8 +15,9 @@ import {
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
+import { fetchNonce } from '../src/client';
 import { assertProgramsDeployed, fundedSigner, sendInstructions } from '../src/lib/cluster';
-import { createNonceAccount, fetchNonce, nextNonce } from '../src/lib/nonce';
+import { createNonceAccount, nextNonce } from '../src/lib/nonce';
 import { type Clients, createClients } from '../src/lib/rpc';
 import {
     authorizationMessage,
@@ -43,7 +44,7 @@ async function setup(clients: Clients) {
         getTransferSolInstruction({ amount: lamports(100_000_000n), destination: pda, source: relayer }),
     ]);
     const nonceAccount = await createNonceAccount(clients, relayer, pda);
-    const nonce = async () => (await fetchNonce(clients.rpc, nonceAccount)).nonce;
+    const nonce = async () => (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data.nonce;
     return { authority, nonce, nonceAccount, pda, relayer };
 }
 
@@ -77,17 +78,19 @@ describe.skipIf(!live)('sign-relay', () => {
     it('a cold-signed transfer relays once and advances the nonce as predicted', async () => {
         const { authority, nonceAccount, pda, relayer } = await setup(clients);
         const recipient = (await generateKeyPairSigner()).address;
-        const { nonce, authority: nonceAuthority } = await fetchNonce(clients.rpc, nonceAccount);
+        const { nonce, authority: nonceAuthority } = (
+            await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })
+        ).data;
         expect(nonceAuthority).toBe(pda);
 
         const execution = executionMessage(pda, [transferFromPda(pda, recipient, 1_000_000n)], nonce);
-        const authorization = authorizationMessage(execution, nonceAccount, pda, [authority.address]);
+        const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
         const signature = await signAuthorization(authorization, authority);
         const predicted = await nextNonce(nonceAccount, nonce, execution);
 
         await sendRelay(clients, await relayTransaction(clients, authorization, [signature], relayer));
         expect((await clients.rpc.getBalance(recipient, { commitment: 'confirmed' }).send()).value).toBe(1_000_000n);
-        expect((await fetchNonce(clients.rpc, nonceAccount)).nonce).toBe(predicted);
+        expect((await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data.nonce).toBe(predicted);
 
         await expectCustomError(
             sendRelay(clients, await relayTransaction(clients, authorization, [signature], relayer)),
@@ -103,11 +106,11 @@ describe.skipIf(!live)('sign-relay', () => {
         // Sign one amount, relay another.
         const signed = executionMessage(pda, [transferFromPda(pda, recipient, 1_000_000n)], await nonce());
         const signature = await signAuthorization(
-            authorizationMessage(signed, nonceAccount, pda, [authority.address]),
+            authorizationMessage(signed, nonceAccount, pda, authority.address),
             authority,
         );
         const edited = executionMessage(pda, [transferFromPda(pda, recipient, 2_000_000n)], await nonce());
-        const authorization = authorizationMessage(edited, nonceAccount, pda, [authority.address]);
+        const authorization = authorizationMessage(edited, nonceAccount, pda, authority.address);
         await expectCustomError(
             sendRelay(clients, await relayTransaction(clients, authorization, [signature], relayer)),
             3,
@@ -127,7 +130,7 @@ describe.skipIf(!live)('token-transfer', () => {
         const initial = await nonce();
 
         const execution = executionMessage(pda, await withdraw(mint, pda, recipient, 250_000_000n), initial);
-        const authorization = authorizationMessage(execution, nonceAccount, pda, [authority.address]);
+        const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
         const signature = await signAuthorization(authorization, authority);
         const predicted = await nextNonce(nonceAccount, initial, execution);
 

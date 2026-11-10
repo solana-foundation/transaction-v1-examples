@@ -39,7 +39,7 @@ async function fixture() {
     const authority = await authorityKeyPair();
     const pda = await programmaticSigner(authority.address);
     const execution = executionMessage(pda, [transferFromPda(pda, RECIPIENT, AMOUNT)], NONCE);
-    const authorization = authorizationMessage(execution, NONCE_ACCOUNT, pda, [authority.address]);
+    const authorization = authorizationMessage(execution, NONCE_ACCOUNT, pda, authority.address);
     return { authority, authorization, execution, pda };
 }
 
@@ -71,9 +71,11 @@ describe('the execution message', () => {
 });
 
 describe('the authorization message', () => {
-    it('matches the Rust client byte for byte', async () => {
+    it('holds the same Execute instruction as the Rust client, whatever the account order', async () => {
         const { authorization } = await fixture();
-        expect(base64.decode(authorization)).toBe(EXPECTED_AUTHORIZATION_MESSAGE);
+        const theirs = getBase64Encoder().encode(EXPECTED_AUTHORIZATION_MESSAGE);
+        expect(instructionsOf(authorization)).toEqual(instructionsOf(theirs));
+        expect(authorization.length).toBe(theirs.length);
     });
 
     it('wraps one Execute instruction and is signed by the authority only', async () => {

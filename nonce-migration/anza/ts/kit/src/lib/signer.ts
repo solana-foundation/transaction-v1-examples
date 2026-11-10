@@ -43,18 +43,10 @@ import {
     signTransactionMessageWithSigners,
     type Transaction,
     type TransactionWithBlockhashLifetime,
-    type V1CompiledTransactionMessage,
     type V1TransactionConfig,
 } from '@solana/kit';
 
-import {
-    findProgrammaticSignerPda,
-    getExecuteInstructionDataEncoder,
-    getSubmitInstruction,
-    MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
-    NONCE_PROGRAM_ADDRESS,
-    resolveExecutionMessageAccounts,
-} from '../client';
+import { findProgrammaticSignerPda, getExecuteInstruction, getSubmitInstruction } from '../client';
 import type { Clients } from './rpc';
 
 /**
@@ -95,156 +87,66 @@ export function transferFromPda(pda: Address, destination: Address, amount: bigi
 }
 
 /**
- * The `Execute` instruction the executor runs: the nonce accounts, then every
- * account of the execution message in order with the privileges it holds
- * there. Mirrors `execute` in the Anza executor client.
+ * A lifetime slot holding `value` instead of a blockhash. The execution
+ * message carries the nonce there and the authorization message carries
+ * zeros; neither is ever sent as a transaction, so the height is never read.
  */
-export function executeInstruction(
-    executionMessage: ReadonlyUint8Array,
-    nonceAccount: Address,
-    nonceAuthority: Address,
-): Instruction {
-    return {
-        accounts: [
-            { address: nonceAuthority, role: AccountRole.READONLY_SIGNER },
-            { address: nonceAccount, role: AccountRole.WRITABLE },
-            { address: NONCE_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-            ...resolveExecutionMessageAccounts({ args: { message: executionMessage } }),
-        ],
-        data: getExecuteInstructionDataEncoder().encode({ message: executionMessage }),
-        programAddress: MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
-    };
-}
-
-/** The all-zero hash the authorization message carries in its blockhash slot. */
-const NO_LIFETIME = '11111111111111111111111111111111' as Blockhash;
+const lifetime = (value: string) => ({ blockhash: value as Blockhash, lastValidBlockHeight: 0n });
 
 /**
  * Builds the execution message: the action, as the PDA would send it.
  *
  * The PDA is the fee payer and signer, which it could never be in a real
  * transaction; the executor fills those roles by CPI. The blockhash slot holds
- * the nonce value instead of a blockhash, and no transaction config is set
- * because the message is never executed at the top level.
+ * the nonce value, and no transaction config is set because the message is
+ * never executed at the top level.
  */
 export function executionMessage(pda: Address, instructions: Instruction[], nonce: Address): ReadonlyUint8Array {
     const message = pipe(
         createTransactionMessage({ version: 1 }),
         m => setTransactionMessageFeePayer(pda, m),
-        // The nonce is a 32-byte value in the same encoding as a blockhash; the
-        // height is never checked because the message is never sent.
-        m =>
-            setTransactionMessageLifetimeUsingBlockhash(
-                { blockhash: nonce as string as Blockhash, lastValidBlockHeight: 0n },
-                m,
-            ),
+        m => setTransactionMessageLifetimeUsingBlockhash(lifetime(nonce), m),
         m => appendTransactionMessageInstructions(instructions, m),
     );
     return getCompiledTransactionMessageEncoder().encode(compileTransactionMessage(message));
 }
 
 /**
- * Builds the authorization message that `authorities` sign.
+ * Builds the authorization message `authority` signs: a v1 message holding
+ * one `Execute` instruction, with no blockhash and no transaction config.
  *
- * It is a v1 message holding exactly one instruction, `Execute`, whose data
- * carries the execution message. Its required signers are the authorities, so
- * signing it with an ordinary ed25519 key is signing a Solana message, which
- * hardware wallets and custody systems can at least ingest. It has no
- * blockhash and no transaction config.
- *
- * Laid out by hand to mirror `authorization_message` in the Anza signer client,
- * byte for byte: the kit compiler would order the accounts differently, and
- * the `Execute` instruction's own signer flags must not become required
- * signatures. Signer privilege comes only from the authorities' signatures
- * and the PDA promotion the Signer program performs.
- *
- * ```text
- * staticAccounts                   privileges
- * ┌──────────────────────────────┬─────────────────┐
- * │ authorities the executor     │ writable signer │
- * │ writes to (at least 1)       │                 │
- * ├──────────────────────────────┼─────────────────┤
- * │ remaining authorities        │ readonly signer │
- * ├──────────────────────────────┼─────────────────┤
- * │ executor writable accounts   │ writable        │
- * ├──────────────────────────────┼─────────────────┤
- * │ executor program id          │ readonly        │
- * ├──────────────────────────────┼─────────────────┤
- * │ executor readonly accounts   │ readonly        │
- * └──────────────────────────────┴─────────────────┘
- * ```
+ * The authority is its only signer. Every account the instruction names is
+ * demoted to a plain account first, the PDA included: the Signer program
+ * grants signer privilege from the authority's signature and from PDA
+ * promotion, not from the message header, and a required signer here would
+ * need a signature nobody can supply. Mirrors `authorization_message` in the
+ * Anza signer client crate, which has no JavaScript counterpart yet.
  */
 export function authorizationMessage(
     executionMessage: ReadonlyUint8Array,
     nonceAccount: Address,
     nonceAuthority: Address,
-    authorities: Address[],
+    authority: Address,
 ): ReadonlyUint8Array {
-    const execute = executeInstruction(executionMessage, nonceAccount, nonceAuthority);
-    const accounts = execute.accounts ?? [];
-    const isAuthority = (address: Address) => authorities.includes(address);
-    const writesTo = (address: Address) => accounts.some(meta => meta.address === address && isWritableRole(meta.role));
-
-    // Authorities the executor writes to must land in the header's
-    // writable-signer range, so they are ordered ahead of the readonly ones.
-    const writableAuthorities = authorities.filter(writesTo);
-    const readonlyAuthorities = authorities.filter(address => !writesTo(address));
-    // Every message needs one writable signer, the fee payer. The message pays
-    // nothing, so when the executor writes to no authority the first one
-    // carries the flag anyway; it grants nothing a CPI could use.
-    const writableSignersCount = Math.max(writableAuthorities.length, 1);
-
-    const writableUnsigned: Address[] = [];
-    const readonlyUnsigned: Address[] = [];
-    for (const meta of accounts) {
-        if (isAuthority(meta.address) || meta.address === execute.programAddress) {
-            continue;
-        }
-        const list = isWritableRole(meta.role) ? writableUnsigned : readonlyUnsigned;
-        if (!list.includes(meta.address)) {
-            list.push(meta.address);
-        }
-    }
-    // A writable occurrence wins over any readonly occurrences.
-    const readonlyOnly = readonlyUnsigned.filter(address => !writableUnsigned.includes(address));
-
-    const staticAccounts = [
-        ...writableAuthorities,
-        ...readonlyAuthorities,
-        ...writableUnsigned,
-        execute.programAddress,
-        ...readonlyOnly,
-    ];
-    const indexOf = (address: Address) => staticAccounts.indexOf(address);
-
-    const compiled: V1CompiledTransactionMessage & { lifetimeToken: Blockhash } = {
-        configMask: 0,
-        configValues: [],
-        header: {
-            numReadonlyNonSignerAccounts: readonlyOnly.length + 1,
-            numReadonlySignerAccounts: Math.max(authorities.length - writableSignersCount, 0),
-            numSignerAccounts: authorities.length,
-        },
-        instructionHeaders: [
-            {
-                numInstructionAccounts: accounts.length,
-                numInstructionDataBytes: execute.data?.length ?? 0,
-                programAccountIndex: indexOf(execute.programAddress),
-            },
-        ],
-        instructionPayloads: [
-            {
-                instructionAccountIndices: accounts.map(meta => indexOf(meta.address)),
-                instructionData: execute.data ?? new Uint8Array(),
-            },
-        ],
-        lifetimeToken: NO_LIFETIME,
-        numInstructions: 1,
-        numStaticAccounts: staticAccounts.length,
-        staticAccounts,
-        version: 1,
+    const execute = getExecuteInstruction({
+        message: executionMessage,
+        nonceAccount,
+        nonceAuthority: createNoopSigner(nonceAuthority),
+    });
+    const demoted: Instruction = {
+        ...execute,
+        accounts: execute.accounts.map(({ address, role }) => ({
+            address,
+            role: isWritableRole(role) ? AccountRole.WRITABLE : AccountRole.READONLY,
+        })),
     };
-    return getCompiledTransactionMessageEncoder().encode(compiled);
+    const message = pipe(
+        createTransactionMessage({ version: 1 }),
+        m => setTransactionMessageFeePayer(authority, m),
+        m => setTransactionMessageLifetimeUsingBlockhash(lifetime('11111111111111111111111111111111'), m),
+        m => appendTransactionMessageInstruction(demoted, m),
+    );
+    return getCompiledTransactionMessageEncoder().encode(compileTransactionMessage(message));
 }
 
 /**

@@ -13,7 +13,6 @@ import {
     appendTransactionMessageInstructions,
     assertIsTransactionWithBlockhashLifetime,
     createTransactionMessage,
-    fetchEncodedAccount,
     generateKeyPairSigner,
     getAddressEncoder,
     getBase58Decoder,
@@ -27,7 +26,7 @@ import {
     signTransactionMessageWithSigners,
 } from '@solana/kit';
 
-import { decodeNonce, getInitializeInstruction, type Nonce, NONCE_PROGRAM_ADDRESS } from '../client';
+import { getInitializeInstruction, NONCE_PROGRAM_ADDRESS } from '../client';
 import type { Clients } from './rpc';
 
 /** The domain tag the Nonce program hashes into every successor value. */
@@ -38,6 +37,7 @@ export const NONCE_SIZE = 72;
 
 /**
  * Creates and initializes a nonce account for `authority`, paid for by `payer`.
+ * The Anza JavaScript client has no helper for this yet; the Rust one does.
  *
  * Creation and initialization travel in one transaction so nothing can claim
  * the funded, uninitialized account in between. The authority does not sign;
@@ -72,17 +72,9 @@ export async function createNonceAccount(clients: Clients, payer: KeyPairSigner,
     return nonceAccount.address;
 }
 
-/** Reads the current state of a nonce account. */
-export async function fetchNonce(rpc: Clients['rpc'], nonceAccount: Address): Promise<Nonce> {
-    const account = await fetchEncodedAccount(rpc, nonceAccount, { commitment: 'confirmed' });
-    if (!account.exists) {
-        throw new Error(`nonce account ${nonceAccount} not found`);
-    }
-    return decodeNonce(account).data;
-}
-
 /**
- * The value `nonceAccount` will hold after `executionMessage` executes.
+ * The value `nonceAccount` will hold after `executionMessage` runs. The Anza
+ * JavaScript client has no helper for this yet; the Rust one does.
  *
  * A System nonce advances to an unpredictable future blockhash. An SPL nonce
  * advances to a hash of its current value and the executed message, so the

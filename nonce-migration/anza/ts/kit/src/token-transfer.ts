@@ -10,8 +10,9 @@
 import { getTransferSolInstruction } from '@solana-program/system';
 import { generateKeyPairSigner, lamports } from '@solana/kit';
 
+import { fetchNonce } from './client';
 import { assertProgramsDeployed, fundedSigner, sendInstructions } from './lib/cluster';
-import { createNonceAccount, fetchNonce, nextNonce } from './lib/nonce';
+import { createNonceAccount, nextNonce } from './lib/nonce';
 import { createClients, json } from './lib/rpc';
 import {
     artifact,
@@ -52,7 +53,7 @@ console.log(`  mint:        ${mint}`);
 console.log(`  PDA account: ${pdaAccount} holds ${uiAmount(await fetchBalance(clients.rpc, pdaAccount))}`);
 console.log(`  recipient:   ${recipient} (no token account yet; the PDA creates it)`);
 const nonceAccount = await createNonceAccount(clients, relayer, pda);
-const { nonce } = await fetchNonce(clients.rpc, nonceAccount);
+const { nonce } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data;
 console.log(`  nonce account: ${nonceAccount}`);
 console.log(`  nonce:         ${nonce}`);
 
@@ -61,7 +62,7 @@ console.log(`  nonce:         ${nonce}`);
 // message, and signed. Nothing here needs an RPC.
 console.log('\n== signed on the cold side ==');
 const execution = executionMessage(pda, await withdraw(mint, pda, recipient, AMOUNT), nonce);
-const authorization = authorizationMessage(execution, nonceAccount, pda, [authority.address]);
+const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
 const signature = await signAuthorization(authorization, authority);
 const predicted = await nextNonce(nonceAccount, nonce, execution);
 const signed = artifact(authorization, [[authority.address, signature]], nonce, predicted);
@@ -93,7 +94,7 @@ console.log(`  PDA account:       holds ${uiAmount(left)}`);
 if (left !== SUPPLY - AMOUNT) {
     throw new Error(`expected the PDA to hold ${SUPPLY - AMOUNT}`);
 }
-const { nonce: advanced } = await fetchNonce(clients.rpc, nonceAccount);
+const { nonce: advanced } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data;
 console.log(`  nonce after:       ${advanced}`);
 console.log(`  predicted:         ${predicted}`);
 if (advanced !== predicted) {
