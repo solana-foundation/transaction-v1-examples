@@ -92,7 +92,7 @@ const lifetime = (value: string) => ({ blockhash: value as Blockhash, lastValidB
  *
  * The PDA is the fee payer and signer, which it could never be in a real
  * transaction; the executor fills those roles by CPI. The blockhash slot holds
- * the nonce value, and no transaction config is set because the message is
+ * the nonce value, and no transaction config is set because the message
  * never runs as a transaction of its own.
  */
 export function executionMessage(pda: Address, action: InstructionPlan, nonce: Address): ReadonlyUint8Array {

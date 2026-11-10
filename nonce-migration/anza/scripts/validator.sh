@@ -71,12 +71,19 @@ start() {
     done
     echo "validator did not become ready; see $LOG_FILE" >&2
     tail -50 "$LOG_FILE" >&2
+    stop
     exit 1
 }
 
 stop() {
     if [[ -f "$PID_FILE" ]]; then
-        kill "$(cat "$PID_FILE")" 2> /dev/null || true
+        # The validator may have exited and its PID been reused, so signal it
+        # only if it is still a validator.
+        local pid
+        pid="$(cat "$PID_FILE")"
+        if ps -p "$pid" -o command= 2> /dev/null | grep -q solana-test-validator; then
+            kill "$pid" 2> /dev/null || true
+        fi
         rm -f "$PID_FILE"
         return 0
     fi

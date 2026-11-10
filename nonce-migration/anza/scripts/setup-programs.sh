@@ -33,6 +33,11 @@ DIRS=(nonce/program signer/program executor/program)
 # link, so the build states the toolchain the pinned commit was written for.
 BUILD_ARGS=(--tools-version v1.52 --arch v0)
 
+# What the binaries in $PROGRAMS were made from. A different mode, pin, or
+# toolchain rebuilds them rather than reusing what is there.
+STAMP="$PROGRAMS/.source"
+SOURCE="$MODE $COMMIT ${BUILD_ARGS[*]}"
+
 all_present() {
     for name in "${NAMES[@]}"; do
         [[ -s "$PROGRAMS/$name.so" ]] || return 1
@@ -40,7 +45,7 @@ all_present() {
 }
 
 mkdir -p "$PROGRAMS"
-if all_present; then
+if all_present && [[ "$(cat "$STAMP" 2> /dev/null)" == "$SOURCE" ]]; then
     echo "programs already in $PROGRAMS"
     exit 0
 fi
@@ -73,4 +78,5 @@ all_present || {
     echo "expected ${NAMES[*]} in $PROGRAMS" >&2
     exit 1
 }
+echo "$SOURCE" > "$STAMP"
 echo "programs ready in $PROGRAMS"

@@ -1,6 +1,5 @@
 /**
- * Token accounts for the examples: a mint, balances, and the instructions a
- * PDA uses to move tokens.
+ * Token accounts for the examples: a mint and balances.
  *
  * The PDA owns token accounts the way any wallet does. Its associated token
  * account is derived from its address, tokens arrive there by an ordinary

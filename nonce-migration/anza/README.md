@@ -105,11 +105,11 @@ The relayer cannot change the amount, the recipient, or the nonce without invali
 | `ed25519-programmatic-signer` | commit `f9322a0` (5 Nov 2026) | no releases exist; the client crates, the vendored TypeScript client, and the programs all come from this commit |
 | Rust | 1.93.1 | the toolchain the pinned Anza workspace builds with |
 | `solana-message` | 4.4.1 | the version the pinned Anza workspace uses; one `v1::Message` type across the client crates and these examples |
-| `@solana/kit` | 8.6.0 | `createTransactionMessage({ version: 1 })`, the v1 compiled-message codec, and `signBytes` |
+| `@solana/kit` | 8.6.0 | `createTransactionMessage({ version: 1 })`, the v1 compiled-message codec, instruction plans, and `signBytes` |
 | `@solana-program/system` | 0.15.0 | the System nonce helpers for the durable nonce comparison |
 | `@solana-program/loader-v3` | 0.8.0 | the vendored client's account resolver imports it |
 | `spl-token-interface` | 3.0.0 | the version the pinned Anza CLI builds `migrate token` with; `spl-associated-token-account-interface` 2.0.0 alongside it |
-| `@solana-program/token` | 0.18.0 | the kit Token client; its associated-token helpers cover the account the PDA creates |
+| `@solana-program/token` | 0.18.0 | the kit Token client; its `createMint`, `mintToATA`, and `transferToATA` instruction plans |
 
 ## Configuration
 
@@ -149,7 +149,7 @@ ts/kit/test/          offline and live tests
 scripts/              validator, program build, and client vendoring
 ```
 
-Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects, funds, sends setup transactions, and checks the programs are deployed; `spl_nonce` (`spl-nonce` in TypeScript) creates and reads SPL nonce accounts and predicts the next value; `signer` builds, signs, and relays the three layers; `token` creates a mint and token accounts, reads balances, and builds the PDA's withdrawal; `durable_nonce` (`durable-nonce`) is the durable nonce flow for comparison.
+Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects, funds, sends setup transactions, and checks the programs are deployed; `spl_nonce` (`spl-nonce` in TypeScript) creates and reads SPL nonce accounts and predicts the next value; `signer` builds, signs, and relays the three layers; `token` creates a mint and token accounts, reads balances, and in Rust builds the PDA's withdrawal, which TypeScript takes straight from `@solana-program/token`; `durable_nonce` (`durable-nonce`) is the durable nonce flow for comparison.
 
 ## Additional resources
 

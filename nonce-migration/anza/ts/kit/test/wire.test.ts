@@ -10,6 +10,7 @@ import {
     getBase64Encoder,
     getCompiledTransactionMessageDecoder,
     type ReadonlyUint8Array,
+    signBytes,
     verifySignature,
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
@@ -101,7 +102,6 @@ describe('the authorization message', () => {
 
     it('is what the signature covers', async () => {
         const { authority, authorization } = await fixture();
-        const { signBytes } = await import('@solana/kit');
         const signature = await signBytes(authority.keyPair.privateKey, authorization);
         expect(await verifySignature(authority.keyPair.publicKey, signature, authorization)).toBe(true);
         const tampered = new Uint8Array(authorization);

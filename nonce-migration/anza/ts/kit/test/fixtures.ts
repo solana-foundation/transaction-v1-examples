@@ -1,6 +1,6 @@
 /**
  * Fixed inputs and the outputs the Anza client crate produces for them, frozen
- * by `rust/tests/wire.rs`. The TypeScript port must match byte for byte.
+ * by `rust/tests/wire.rs`, and the actions the tests build against them.
  */
 
 import { getTransferSolInstruction } from '@solana-program/system';
