@@ -10,13 +10,14 @@ import {
     generateKeyPairSigner,
     isSolanaError,
     lamports,
+    singleInstructionPlan,
     SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
     SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
 import { fetchNonce } from '../src/client';
-import { assertProgramsDeployed, fundedSigner, sendInstructions } from '../src/lib/cluster';
+import { assertProgramsDeployed, fundedSigner, sendTransactions } from '../src/lib/cluster';
 import { createNonceAccount, nextNonce } from '../src/lib/nonce';
 import { type Clients, createClients } from '../src/lib/rpc';
 import {
@@ -28,7 +29,7 @@ import {
     signAuthorization,
     transferFromPda,
 } from '../src/lib/signer';
-import { associatedTokenAddress, createMint, fetchBalance, mintTo, withdraw } from '../src/lib/token';
+import { associatedTokenAddress, createMint, fetchBalance, mintToAta, transferToAta } from '../src/lib/token';
 
 const live = process.env.PSIGNER_LIVE === '1';
 
@@ -40,9 +41,13 @@ async function setup(clients: Clients) {
     const relayer = await fundedSigner(clients, 5_000_000_000n);
     const authority = await generateKeyPairSigner();
     const pda = await programmaticSigner(authority.address);
-    await sendInstructions(clients, relayer, [
-        getTransferSolInstruction({ amount: lamports(100_000_000n), destination: pda, source: relayer }),
-    ]);
+    await sendTransactions(
+        clients,
+        relayer,
+        singleInstructionPlan(
+            getTransferSolInstruction({ amount: lamports(100_000_000n), destination: pda, source: relayer }),
+        ),
+    );
     const nonceAccount = await createNonceAccount(clients, relayer, pda);
     const nonce = async () => (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data.nonce;
     return { authority, nonce, nonceAccount, pda, relayer };
@@ -126,10 +131,10 @@ describe.skipIf(!live)('token-transfer', () => {
         const { authority, nonce, nonceAccount, pda, relayer } = await setup(clients);
         const recipient = (await generateKeyPairSigner()).address;
         const mint = await createMint(clients, relayer);
-        const pdaAccount = await mintTo(clients, relayer, mint, pda, 1_000_000_000n);
+        const pdaAccount = await mintToAta(clients, relayer, mint, pda, 1_000_000_000n);
         const initial = await nonce();
 
-        const execution = executionMessage(pda, await withdraw(mint, pda, recipient, 250_000_000n), initial);
+        const execution = executionMessage(pda, await transferToAta(mint, pda, recipient, 250_000_000n), initial);
         const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
         const signature = await signAuthorization(authorization, authority);
         const predicted = await nextNonce(nonceAccount, initial, execution);

@@ -5,20 +5,21 @@
 //! loaded first. The endpoint comes from `PSIGNER_RPC_URL`.
 
 use anyhow::Result;
-use psigner::cluster::{assert_programs_deployed, client, funded_keypair};
+use psigner::cluster::{assert_programs_deployed, client, funded_keypair, send_transaction};
 use psigner::nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::signer::{
     authorization_message, execution_message, programmatic_signer, relay_transaction,
     sign_authorization,
 };
-use psigner::token::{associated_token_address, create_mint, fetch_balance, mint_to, withdraw};
+use psigner::token::{
+    associated_token_address, create_mint, fetch_balance, mint_to_ata, transfer_to_ata,
+};
 use psigner::DEFAULT_RPC_URL;
 use solana_address::Address;
 use solana_keypair::Keypair;
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
-use solana_transaction::Transaction;
 
 fn rpc_url() -> String {
     std::env::var("PSIGNER_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
@@ -40,17 +41,16 @@ fn setup() -> Result<Setup> {
     let relayer = funded_keypair(&client, 5_000_000_000)?;
     let authority = Keypair::new();
     let pda = programmatic_signer(&authority.pubkey());
-    let fund = Transaction::new_signed_with_payer(
+    send_transaction(
+        &client,
+        &relayer,
         &[system_instruction::transfer(
             &relayer.pubkey(),
             &pda,
             100_000_000,
         )],
-        Some(&relayer.pubkey()),
         &[&relayer],
-        client.get_latest_blockhash()?,
-    );
-    client.send_and_confirm_transaction(&fund)?;
+    )?;
     let nonce_account = create_nonce_account(&client, &relayer, &pda)?;
     Ok(Setup {
         client,
@@ -165,12 +165,12 @@ fn a_cold_signed_token_withdrawal_creates_the_destination_and_lands() -> Result<
     let s = setup()?;
     let recipient = Keypair::new().pubkey();
     let mint = create_mint(&s.client, &s.relayer)?;
-    let pda_account = mint_to(&s.client, &s.relayer, &mint, &s.pda, 1_000_000_000)?;
+    let pda_account = mint_to_ata(&s.client, &s.relayer, &mint, &s.pda, 1_000_000_000)?;
     let nonce = s.nonce()?;
 
     let execution = execution_message(
         &s.pda,
-        &withdraw(&mint, &s.pda, &recipient, 250_000_000)?,
+        &transfer_to_ata(&mint, &s.pda, &recipient, 250_000_000)?,
         nonce,
     )?;
     let authorization = authorization_message(

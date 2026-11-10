@@ -13,7 +13,8 @@
 use anyhow::{bail, Result};
 use clap::Parser;
 use psigner::cluster::{
-    assert_programs_deployed, client, compute_units, funded_keypair, wait_for_blockhash_expiry,
+    assert_programs_deployed, client, compute_units, funded_keypair, send_transaction,
+    wait_for_blockhash_expiry,
 };
 use psigner::legacy::{
     create_system_nonce_account, fetch_system_nonce, sign_durable_nonce_transfer,
@@ -30,7 +31,6 @@ use solana_message::VersionedMessage;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
 use solana_transaction::versioned::VersionedTransaction;
-use solana_transaction::Transaction;
 
 const AMOUNT: u64 = 10_000_000;
 
@@ -64,14 +64,14 @@ fn main() -> Result<()> {
         system_nonce,
         &recipient,
         AMOUNT,
-    );
+    )?;
     println!("  nonce account: {system_nonce_account}");
     println!("  nonce:         {system_nonce}");
     println!(
         "  signed by:     {} (the cold key, which also pays)",
         cold.pubkey()
     );
-    println!("  size:          {} bytes", legacy_size(&durable));
+    println!("  size:          {} bytes", versioned_size(&durable));
     let signature = client.send_and_confirm_transaction(&durable)?;
     println!("  landed:        {signature}");
     let advanced = fetch_system_nonce(&client, &system_nonce_account)?;
@@ -90,17 +90,16 @@ fn main() -> Result<()> {
 
     // Fund the PDA. It is a plain System-owned address, so this is an ordinary
     // transfer; in a migration it is where the cold key's SOL moves to.
-    let fund = Transaction::new_signed_with_payer(
+    send_transaction(
+        &client,
+        &relayer,
         &[system_instruction::transfer(
             &relayer.pubkey(),
             &pda,
             1_000_000_000,
         )],
-        Some(&relayer.pubkey()),
         &[&relayer],
-        client.get_latest_blockhash()?,
-    );
-    client.send_and_confirm_transaction(&fund)?;
+    )?;
 
     // One SPL nonce account per action in flight. The relayer pays the rent;
     // the PDA is the authority, so only an authorization can consume it.
@@ -216,16 +215,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// The wire size of a legacy transaction: a compact-u16 signature count, the
-/// signatures, then the message.
-fn legacy_size(transaction: &Transaction) -> usize {
-    1 + transaction.signatures.len() * 64 + transaction.message.serialize().len()
-}
-
-/// The wire size of a versioned transaction, laid out the same way.
+/// The wire size of a v1 transaction: the message, then one signature per
+/// required signer, with no count in front.
 fn versioned_size(transaction: &VersionedTransaction) -> usize {
     let VersionedMessage::V1(message) = &transaction.message else {
-        unreachable!("the relay transaction is v1");
+        unreachable!("every transaction here is v1");
     };
-    1 + transaction.signatures.len() * 64 + message.serialize().len()
+    message.serialize().len() + transaction.signatures.len() * 64
 }

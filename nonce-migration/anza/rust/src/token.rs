@@ -14,12 +14,13 @@ use solana_program_pack::Pack;
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
-use solana_transaction::Transaction;
 use spl_associated_token_account_interface::address::get_associated_token_address;
 use spl_associated_token_account_interface::instruction::create_associated_token_account_idempotent;
 use spl_token_interface::instruction::{initialize_mint2, mint_to_checked, transfer_checked};
 use spl_token_interface::state::{Account as TokenAccount, Mint};
 use spl_token_interface::ID as TOKEN_PROGRAM;
+
+use crate::cluster::send_transaction;
 
 /// Decimals of the mint the examples create: USDC's.
 pub const DECIMALS: u8 = 6;
@@ -44,13 +45,14 @@ pub fn create_mint(client: &RpcClient, payer: &Keypair) -> Result<Address> {
             DECIMALS,
         )?,
     ];
-    send(client, payer, &instructions, &[payer, &mint]).context("failed to create the mint")?;
+    send_transaction(client, payer, &instructions, &[payer, &mint])
+        .context("failed to create the mint")?;
     Ok(mint.pubkey())
 }
 
 /// Mints `amount` to `owner`'s associated token account, creating it if it
 /// does not exist, and returns that account. `payer` is the mint authority.
-pub fn mint_to(
+pub fn mint_to_ata(
     client: &RpcClient,
     payer: &Keypair,
     mint: &Address,
@@ -70,7 +72,7 @@ pub fn mint_to(
             DECIMALS,
         )?,
     ];
-    send(client, payer, &instructions, &[payer]).context("failed to mint")?;
+    send_transaction(client, payer, &instructions, &[payer]).context("failed to mint")?;
     Ok(account)
 }
 
@@ -101,7 +103,7 @@ pub fn ui_amount(amount: u64) -> String {
 /// `recipient`'s associated token account if it does not exist, with the PDA
 /// paying the rent, then `TransferChecked` out of the PDA's own, with the PDA
 /// as the owner.
-pub fn withdraw(
+pub fn transfer_to_ata(
     mint: &Address,
     pda: &Address,
     recipient: &Address,
@@ -120,17 +122,4 @@ pub fn withdraw(
             DECIMALS,
         )?,
     ])
-}
-
-fn send(
-    client: &RpcClient,
-    payer: &Keypair,
-    instructions: &[Instruction],
-    signers: &[&Keypair],
-) -> Result<()> {
-    let blockhash = client.get_latest_blockhash()?;
-    let transaction =
-        Transaction::new_signed_with_payer(instructions, Some(&payer.pubkey()), signers, blockhash);
-    client.send_and_confirm_transaction(&transaction)?;
-    Ok(())
 }

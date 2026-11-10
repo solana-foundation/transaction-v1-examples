@@ -9,12 +9,14 @@ use anyhow::{Context, Result};
 use solana_address::Address;
 use solana_hash::Hash;
 use solana_keypair::Keypair;
-use solana_message::Message;
+use solana_message::{v1, VersionedMessage};
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_rpc_client_nonce_utils::data_from_account;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
-use solana_transaction::Transaction;
+use solana_transaction::versioned::VersionedTransaction;
+
+use crate::cluster::send_transaction;
 
 /// Creates a System nonce account whose authority is `cold`, paid for by `cold`.
 pub fn create_system_nonce_account(client: &RpcClient, cold: &Keypair) -> Result<Address> {
@@ -26,15 +28,7 @@ pub fn create_system_nonce_account(client: &RpcClient, cold: &Keypair) -> Result
         &cold.pubkey(),
         rent,
     );
-    let blockhash = client.get_latest_blockhash()?;
-    let transaction = Transaction::new_signed_with_payer(
-        &instructions,
-        Some(&cold.pubkey()),
-        &[cold, &nonce_account],
-        blockhash,
-    );
-    client
-        .send_and_confirm_transaction(&transaction)
+    send_transaction(client, cold, &instructions, &[cold, &nonce_account])
         .context("failed to create the System nonce account")?;
     Ok(nonce_account.pubkey())
 }
@@ -46,22 +40,37 @@ pub fn fetch_system_nonce(client: &RpcClient, nonce_account: &Address) -> Result
     Ok(data.durable_nonce.as_hash().to_owned())
 }
 
+/// The budget of the durable nonce transfer: two System instructions cost 300
+/// compute units, and the cold key is offline and cannot simulate.
+const DURABLE_NONCE_CONFIG: v1::TransactionConfig = v1::TransactionConfig::empty()
+    .with_compute_unit_limit(1_000)
+    .with_loaded_accounts_data_size_limit(64 * 1024);
+
 /// Signs a durable nonce transfer from `cold`. Nothing is sent.
+///
+/// The message is v1, and a durable nonce works on it as it does on a legacy
+/// one: the nonce sits in the blockhash slot and `AdvanceNonceAccount` comes
+/// first.
 pub fn sign_durable_nonce_transfer(
     cold: &Keypair,
     nonce_account: &Address,
     nonce: Hash,
     recipient: &Address,
     lamports: u64,
-) -> Transaction {
-    let transfer = system_instruction::transfer(&cold.pubkey(), recipient, lamports);
-    let message = Message::new_with_nonce(
-        vec![transfer],
-        Some(&cold.pubkey()),
-        nonce_account,
+) -> Result<VersionedTransaction> {
+    let instructions = [
+        system_instruction::advance_nonce_account(nonce_account, &cold.pubkey()),
+        system_instruction::transfer(&cold.pubkey(), recipient, lamports),
+    ];
+    let message = v1::Message::try_compile_with_config(
         &cold.pubkey(),
-    );
-    let mut transaction = Transaction::new_unsigned(message);
-    transaction.sign(&[cold], nonce);
-    transaction
+        &instructions,
+        nonce,
+        DURABLE_NONCE_CONFIG,
+    )
+    .context("failed to compile the durable nonce transaction")?;
+    Ok(VersionedTransaction::try_new(
+        VersionedMessage::V1(message),
+        &[cold],
+    )?)
 }

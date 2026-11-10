@@ -18,8 +18,6 @@ import {
 import {
     type Address,
     appendTransactionMessageInstruction,
-    appendTransactionMessageInstructions,
-    assertIsTransactionWithBlockhashLifetime,
     assertIsTransactionWithDurableNonceLifetime,
     createTransactionMessage,
     generateKeyPairSigner,
@@ -29,49 +27,42 @@ import {
     type Nonce,
     pipe,
     sendAndConfirmDurableNonceTransactionFactory,
-    sendAndConfirmTransactionFactory,
     type SendableTransaction,
+    sequentialInstructionPlan,
+    setTransactionMessageConfig,
     setTransactionMessageFeePayerSigner,
-    setTransactionMessageLifetimeUsingBlockhash,
     setTransactionMessageLifetimeUsingDurableNonce,
     type Signature,
     signTransactionMessageWithSigners,
     type Transaction,
     type TransactionWithDurableNonceLifetime,
+    type V1TransactionConfig,
 } from '@solana/kit';
 
+import { sendTransactions } from './cluster';
 import type { Clients } from './rpc';
 
 /** Creates a System nonce account whose authority is `cold`, paid for by `cold`. */
 export async function createSystemNonceAccount(clients: Clients, cold: KeyPairSigner): Promise<Address> {
     const nonceAccount = await generateKeyPairSigner();
     const rent = await clients.rpc.getMinimumBalanceForRentExemption(BigInt(getNonceSize())).send();
-    const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash().send();
-    const message = pipe(
-        createTransactionMessage({ version: 'legacy' }),
-        m => setTransactionMessageFeePayerSigner(cold, m),
-        m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-        m =>
-            appendTransactionMessageInstructions(
-                [
-                    getCreateAccountInstruction({
-                        lamports: rent,
-                        newAccount: nonceAccount,
-                        payer: cold,
-                        programAddress: SYSTEM_PROGRAM_ADDRESS,
-                        space: BigInt(getNonceSize()),
-                    }),
-                    getInitializeNonceAccountInstruction({
-                        nonceAccount: nonceAccount.address,
-                        nonceAuthority: cold.address,
-                    }),
-                ],
-                m,
-            ),
+    await sendTransactions(
+        clients,
+        cold,
+        sequentialInstructionPlan([
+            getCreateAccountInstruction({
+                lamports: rent,
+                newAccount: nonceAccount,
+                payer: cold,
+                programAddress: SYSTEM_PROGRAM_ADDRESS,
+                space: BigInt(getNonceSize()),
+            }),
+            getInitializeNonceAccountInstruction({
+                nonceAccount: nonceAccount.address,
+                nonceAuthority: cold.address,
+            }),
+        ]),
     );
-    const transaction = await signTransactionMessageWithSigners(message);
-    assertIsTransactionWithBlockhashLifetime(transaction);
-    await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
     return nonceAccount.address;
 }
 
@@ -81,10 +72,25 @@ export async function fetchSystemNonce(rpc: Clients['rpc'], nonceAccount: Addres
     return data.blockhash as string as Nonce;
 }
 
+/**
+ * The budget of the durable nonce transfer: two System instructions cost 300
+ * compute units, and the cold key is offline and cannot simulate.
+ */
+const DURABLE_NONCE_CONFIG: V1TransactionConfig = {
+    computeUnitLimit: 1_000,
+    loadedAccountsDataSizeLimit: 64 * 1024,
+};
+
 /** A signed durable nonce transaction. */
 export type DurableNonceTransaction = SendableTransaction & Transaction & TransactionWithDurableNonceLifetime;
 
-/** Signs a durable nonce transfer from `cold`. Nothing is sent. */
+/**
+ * Signs a durable nonce transfer from `cold`. Nothing is sent.
+ *
+ * The message is v1, and a durable nonce works on it as it does on a legacy
+ * one: the nonce sits in the blockhash slot and `AdvanceNonceAccount` comes
+ * first.
+ */
 export async function signDurableNonceTransfer(
     cold: KeyPairSigner,
     nonceAccount: Address,
@@ -93,7 +99,7 @@ export async function signDurableNonceTransfer(
     amount: bigint,
 ): Promise<DurableNonceTransaction> {
     const message = pipe(
-        createTransactionMessage({ version: 'legacy' }),
+        createTransactionMessage({ version: 1 }),
         m => setTransactionMessageFeePayerSigner(cold, m),
         m =>
             setTransactionMessageLifetimeUsingDurableNonce(
@@ -105,6 +111,7 @@ export async function signDurableNonceTransfer(
                 getTransferSolInstruction({ amount: lamports(amount), destination: recipient, source: cold }),
                 m,
             ),
+        m => setTransactionMessageConfig(DURABLE_NONCE_CONFIG, m),
     );
     const transaction = await signTransactionMessageWithSigners(message);
     assertIsTransactionWithDurableNonceLifetime(transaction);

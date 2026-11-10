@@ -10,23 +10,17 @@
 import { getCreateAccountInstruction } from '@solana-program/system';
 import {
     type Address,
-    appendTransactionMessageInstructions,
-    assertIsTransactionWithBlockhashLifetime,
-    createTransactionMessage,
     generateKeyPairSigner,
     getAddressEncoder,
     getBase58Decoder,
     getUtf8Encoder,
     type KeyPairSigner,
-    pipe,
     type ReadonlyUint8Array,
-    sendAndConfirmTransactionFactory,
-    setTransactionMessageFeePayerSigner,
-    setTransactionMessageLifetimeUsingBlockhash,
-    signTransactionMessageWithSigners,
+    sequentialInstructionPlan,
 } from '@solana/kit';
 
 import { getInitializeInstruction, NONCE_PROGRAM_ADDRESS } from '../client';
+import { sendTransactions } from './cluster';
 import type { Clients } from './rpc';
 
 /** The domain tag the Nonce program hashes into every successor value. */
@@ -46,29 +40,20 @@ export const NONCE_SIZE = 72;
 export async function createNonceAccount(clients: Clients, payer: KeyPairSigner, authority: Address): Promise<Address> {
     const nonceAccount = await generateKeyPairSigner();
     const rent = await clients.rpc.getMinimumBalanceForRentExemption(BigInt(NONCE_SIZE)).send();
-    const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash().send();
-    const message = pipe(
-        createTransactionMessage({ version: 'legacy' }),
-        m => setTransactionMessageFeePayerSigner(payer, m),
-        m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-        m =>
-            appendTransactionMessageInstructions(
-                [
-                    getCreateAccountInstruction({
-                        lamports: rent,
-                        newAccount: nonceAccount,
-                        payer,
-                        programAddress: NONCE_PROGRAM_ADDRESS,
-                        space: BigInt(NONCE_SIZE),
-                    }),
-                    getInitializeInstruction({ authority, nonceAccount: nonceAccount.address }),
-                ],
-                m,
-            ),
+    await sendTransactions(
+        clients,
+        payer,
+        sequentialInstructionPlan([
+            getCreateAccountInstruction({
+                lamports: rent,
+                newAccount: nonceAccount,
+                payer,
+                programAddress: NONCE_PROGRAM_ADDRESS,
+                space: BigInt(NONCE_SIZE),
+            }),
+            getInitializeInstruction({ authority, nonceAccount: nonceAccount.address }),
+        ]),
     );
-    const transaction = await signTransactionMessageWithSigners(message);
-    assertIsTransactionWithBlockhashLifetime(transaction);
-    await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
     return nonceAccount.address;
 }
 

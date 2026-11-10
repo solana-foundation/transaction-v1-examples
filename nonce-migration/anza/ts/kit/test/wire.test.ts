@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { MESSAGE_EXECUTOR_PROGRAM_ADDRESS } from '../src/client';
 import { nextNonce } from '../src/lib/nonce';
 import { authorizationMessage, executionMessage, programmaticSigner, transferFromPda } from '../src/lib/signer';
-import { associatedTokenAddress, withdraw } from '../src/lib/token';
+import { associatedTokenAddress, transferToAta } from '../src/lib/token';
 import {
     AMOUNT,
     authorityKeyPair,
@@ -145,7 +145,7 @@ function instructionsOf(message: ReadonlyUint8Array) {
 describe('a token withdrawal', () => {
     it('holds the same instructions as the Rust client, whatever the account order', async () => {
         const { pda } = await fixture();
-        const ours = executionMessage(pda, await withdraw(MINT, pda, RECIPIENT, AMOUNT), NONCE);
+        const ours = executionMessage(pda, await transferToAta(MINT, pda, RECIPIENT, AMOUNT), NONCE);
         const theirs = getBase64Encoder().encode(EXPECTED_TOKEN_EXECUTION_MESSAGE);
         expect(instructionsOf(ours)).toEqual(instructionsOf(theirs));
         expect(ours.length).toBe(theirs.length);
@@ -153,7 +153,7 @@ describe('a token withdrawal', () => {
 
     it('creates the destination and transfers as the PDA, the only signer', async () => {
         const { pda } = await fixture();
-        const message = executionMessage(pda, await withdraw(MINT, pda, RECIPIENT, AMOUNT), NONCE);
+        const message = executionMessage(pda, await transferToAta(MINT, pda, RECIPIENT, AMOUNT), NONCE);
         const [create, transfer] = instructionsOf(message);
         expect(create!.programAddress).toBe(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
         expect(create!.accounts[0]).toEqual({ address: pda, role: 'signer writable' });

@@ -2,13 +2,18 @@
 
 import {
     airdropFactory,
-    appendTransactionMessageInstructions,
     assertIsTransactionWithBlockhashLifetime,
     type Blockhash,
     createTransactionMessage,
+    createTransactionPlanExecutor,
+    createTransactionPlanner,
+    estimateAndSetResourceLimitsFactory,
+    estimateResourceLimitsFactory,
     fetchEncodedAccount,
+    fillTransactionMessageProvisoryResourceLimits,
     generateKeyPairSigner,
-    type Instruction,
+    getSignatureFromTransaction,
+    type InstructionPlan,
     type KeyPairSigner,
     lamports,
     pipe,
@@ -75,24 +80,40 @@ export async function waitForBlockhashExpiry(rpc: Clients['rpc'], blockhash: Blo
 }
 
 /**
- * Sends `instructions` in one legacy transaction paid by `payer`, signed by
- * every signer they name, and waits for it to confirm. For setup steps that
- * are not the point of an example.
+ * Sends `plan` as v1 transactions paid by `payer`, signed by every signer the
+ * instructions name, and waits for each to confirm. For setup steps that are
+ * not the point of an example.
+ *
+ * Unset v1 limits are zero, so the planner reserves room for them and the
+ * executor fills in what a simulation measures, once the message has a
+ * blockhash to simulate with.
  */
-export async function sendInstructions(
-    clients: Clients,
-    payer: KeyPairSigner,
-    instructions: Instruction[],
-): Promise<void> {
-    const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash().send();
-    const transaction = await signTransactionMessageWithSigners(
-        pipe(
-            createTransactionMessage({ version: 'legacy' }),
-            m => setTransactionMessageFeePayerSigner(payer, m),
-            m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-            m => appendTransactionMessageInstructions(instructions, m),
-        ),
+export async function sendTransactions(clients: Clients, payer: KeyPairSigner, plan: InstructionPlan): Promise<void> {
+    const planner = createTransactionPlanner({
+        createTransactionMessage: () =>
+            pipe(
+                createTransactionMessage({ version: 1 }),
+                m => setTransactionMessageFeePayerSigner(payer, m),
+                fillTransactionMessageProvisoryResourceLimits,
+            ),
+    });
+    const estimateAndSetResourceLimits = estimateAndSetResourceLimitsFactory(
+        estimateResourceLimitsFactory({ rpc: clients.rpc }),
     );
-    assertIsTransactionWithBlockhashLifetime(transaction);
-    await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
+    const executor = createTransactionPlanExecutor({
+        executeTransactionMessage: async (context, message) => {
+            const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
+            const transaction = await signTransactionMessageWithSigners(
+                await estimateAndSetResourceLimits(
+                    setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, message),
+                    { commitment: 'confirmed' },
+                ),
+            );
+            context.transaction = transaction;
+            assertIsTransactionWithBlockhashLifetime(transaction);
+            await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
+            return { signature: getSignatureFromTransaction(transaction), transaction };
+        },
+    });
+    await executor(await planner(plan));
 }

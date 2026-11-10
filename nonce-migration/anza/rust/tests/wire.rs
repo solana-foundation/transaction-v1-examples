@@ -9,7 +9,7 @@ use psigner::nonce::next_nonce;
 use psigner::signer::{
     authorization_message, execution_message, programmatic_signer, sign_authorization,
 };
-use psigner::token::{associated_token_address, withdraw};
+use psigner::token::{associated_token_address, transfer_to_ata};
 use solana_address::Address;
 use solana_hash::Hash;
 use solana_keypair::Keypair;
@@ -174,7 +174,7 @@ fn successor_derivation_matches_the_nonce_program_vectors() {
 #[test]
 fn a_token_withdrawal_creates_the_destination_and_transfers_as_the_pda() {
     let (_, pda, _, _) = fixture();
-    let instructions = withdraw(&MINT, &pda, &RECIPIENT, AMOUNT).unwrap();
+    let instructions = transfer_to_ata(&MINT, &pda, &RECIPIENT, AMOUNT).unwrap();
     assert_eq!(instructions.len(), 2);
     assert_eq!(
         instructions[0].program_id,

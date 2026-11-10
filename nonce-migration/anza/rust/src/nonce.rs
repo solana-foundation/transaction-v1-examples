@@ -12,9 +12,10 @@ use solana_keypair::Keypair;
 use solana_message::{v1, VersionedMessage};
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_signer::Signer;
-use solana_transaction::Transaction;
 use spl_message_executor_interface::instruction::derive_transition_commitment;
 use spl_nonce_interface::state::Nonce;
+
+use crate::cluster::send_transaction;
 
 /// Creates and initializes a nonce account for `authority`, paid for by `payer`.
 ///
@@ -34,15 +35,7 @@ pub fn create_nonce_account(
         authority,
         rent,
     );
-    let blockhash = client.get_latest_blockhash()?;
-    let transaction = Transaction::new_signed_with_payer(
-        &instructions,
-        Some(&payer.pubkey()),
-        &[payer, &nonce_account],
-        blockhash,
-    );
-    client
-        .send_and_confirm_transaction(&transaction)
+    send_transaction(client, payer, &instructions, &[payer, &nonce_account])
         .context("failed to create the nonce account")?;
     Ok(nonce_account.pubkey())
 }

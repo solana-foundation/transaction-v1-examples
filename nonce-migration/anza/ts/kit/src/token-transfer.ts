@@ -8,10 +8,10 @@
  */
 
 import { getTransferSolInstruction } from '@solana-program/system';
-import { generateKeyPairSigner, lamports } from '@solana/kit';
+import { generateKeyPairSigner, lamports, singleInstructionPlan } from '@solana/kit';
 
 import { fetchNonce } from './client';
-import { assertProgramsDeployed, fundedSigner, sendInstructions } from './lib/cluster';
+import { assertProgramsDeployed, fundedSigner, sendTransactions } from './lib/cluster';
 import { createNonceAccount, nextNonce } from './lib/nonce';
 import { createClients, json } from './lib/rpc';
 import {
@@ -23,7 +23,7 @@ import {
     sendRelay,
     signAuthorization,
 } from './lib/signer';
-import { associatedTokenAddress, createMint, fetchBalance, mintTo, uiAmount, withdraw } from './lib/token';
+import { associatedTokenAddress, createMint, fetchBalance, mintToAta, uiAmount, transferToAta } from './lib/token';
 
 /** 1,000 tokens at six decimals: what the PDA holds. */
 const SUPPLY = 1_000_000_000n;
@@ -44,11 +44,15 @@ console.log(`  authority: ${authority.address} (cold)`);
 console.log(`  pda:       ${pda} (owns the token account)`);
 // The PDA pays the rent of the token account it creates for the recipient, so
 // it needs some SOL as well as tokens.
-await sendInstructions(clients, relayer, [
-    getTransferSolInstruction({ amount: lamports(100_000_000n), destination: pda, source: relayer }),
-]);
+await sendTransactions(
+    clients,
+    relayer,
+    singleInstructionPlan(
+        getTransferSolInstruction({ amount: lamports(100_000_000n), destination: pda, source: relayer }),
+    ),
+);
 const mint = await createMint(clients, relayer);
-const pdaAccount = await mintTo(clients, relayer, mint, pda, SUPPLY);
+const pdaAccount = await mintToAta(clients, relayer, mint, pda, SUPPLY);
 console.log(`  mint:        ${mint}`);
 console.log(`  PDA account: ${pdaAccount} holds ${uiAmount(await fetchBalance(clients.rpc, pdaAccount))}`);
 console.log(`  recipient:   ${recipient} (no token account yet; the PDA creates it)`);
@@ -61,7 +65,7 @@ console.log(`  nonce:         ${nonce}`);
 // owner, compiled into an execution message, wrapped in an authorization
 // message, and signed. Nothing here needs an RPC.
 console.log('\n== signed on the cold side ==');
-const execution = executionMessage(pda, await withdraw(mint, pda, recipient, AMOUNT), nonce);
+const execution = executionMessage(pda, await transferToAta(mint, pda, recipient, AMOUNT), nonce);
 const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
 const signature = await signAuthorization(authorization, authority);
 const predicted = await nextNonce(nonceAccount, nonce, execution);

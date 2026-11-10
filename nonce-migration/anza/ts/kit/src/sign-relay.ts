@@ -14,25 +14,18 @@
 
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
-    appendTransactionMessageInstruction,
-    assertIsTransactionWithBlockhashLifetime,
-    createTransactionMessage,
     generateKeyPairSigner,
     getCompiledTransactionMessageDecoder,
     getTransactionSize,
     isSolanaError,
     lamports,
-    pipe,
-    sendAndConfirmTransactionFactory,
-    setTransactionMessageFeePayerSigner,
-    setTransactionMessageLifetimeUsingBlockhash,
-    signTransactionMessageWithSigners,
+    singleInstructionPlan,
     SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
     SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
 } from '@solana/kit';
 
 import { fetchNonce } from './client';
-import { assertProgramsDeployed, fundedSigner, waitForBlockhashExpiry } from './lib/cluster';
+import { assertProgramsDeployed, fundedSigner, sendTransactions, waitForBlockhashExpiry } from './lib/cluster';
 import {
     createSystemNonceAccount,
     fetchSystemNonce,
@@ -88,23 +81,13 @@ console.log(`  pda:       ${pda} (holds the funds; nothing to create)`);
 
 // Fund the PDA. It is a plain System-owned address, so this is an ordinary
 // transfer; in a migration it is where the cold key's SOL moves to.
-{
-    const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash().send();
-    const fund = await signTransactionMessageWithSigners(
-        pipe(
-            createTransactionMessage({ version: 'legacy' }),
-            m => setTransactionMessageFeePayerSigner(relayer, m),
-            m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-            m =>
-                appendTransactionMessageInstruction(
-                    getTransferSolInstruction({ amount: lamports(1_000_000_000n), destination: pda, source: relayer }),
-                    m,
-                ),
-        ),
-    );
-    assertIsTransactionWithBlockhashLifetime(fund);
-    await sendAndConfirmTransactionFactory(clients)(fund, { commitment: 'confirmed' });
-}
+await sendTransactions(
+    clients,
+    relayer,
+    singleInstructionPlan(
+        getTransferSolInstruction({ amount: lamports(1_000_000_000n), destination: pda, source: relayer }),
+    ),
+);
 
 // One SPL nonce account per action in flight. The relayer pays the rent; the
 // PDA is the authority, so only an authorization can consume it.

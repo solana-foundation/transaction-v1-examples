@@ -1,18 +1,24 @@
-//! Connecting to a cluster, funding keys, and checking the programs are there.
+//! Connecting to a cluster, funding keys, sending setup transactions, and
+//! checking the programs are there.
 
 use anyhow::{bail, Context, Result};
 use solana_address::Address;
 use solana_commitment_config::CommitmentConfig;
 use solana_hash::Hash;
+use solana_instruction::Instruction;
 use solana_keypair::Keypair;
+use solana_message::{v1, VersionedMessage};
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_rpc_client_api::config::RpcTransactionConfig;
 use solana_signature::Signature;
 use solana_signer::Signer;
+use solana_transaction::versioned::VersionedTransaction;
 use solana_transaction_status_client_types::option_serializer::OptionSerializer;
 use solana_transaction_status_client_types::UiTransactionEncoding;
 use std::thread::sleep;
 use std::time::Duration;
+
+use crate::signer::RELAY_CONFIG;
 
 /// The three programs the examples call, with the names their crates use.
 pub const PROGRAMS: [(&str, Address); 3] = [
@@ -59,6 +65,29 @@ pub fn funded_keypair(client: &RpcClient, lamports: u64) -> Result<Keypair> {
         CommitmentConfig::confirmed(),
     )?;
     Ok(keypair)
+}
+
+/// Sends `instructions` in one v1 transaction paid by `payer`, signed by
+/// `signers`, and waits for it to confirm. For setup steps that are not the
+/// point of an example.
+///
+/// Unset v1 limits are zero, so every transaction states them; the relay's
+/// budget is more than any setup step needs.
+pub fn send_transaction(
+    client: &RpcClient,
+    payer: &Keypair,
+    instructions: &[Instruction],
+    signers: &[&Keypair],
+) -> Result<Signature> {
+    let message = v1::Message::try_compile_with_config(
+        &payer.pubkey(),
+        instructions,
+        client.get_latest_blockhash()?,
+        RELAY_CONFIG,
+    )
+    .context("failed to compile the transaction")?;
+    let transaction = VersionedTransaction::try_new(VersionedMessage::V1(message), signers)?;
+    Ok(client.send_and_confirm_transaction(&transaction)?)
 }
 
 /// Blocks until `blockhash` can no longer be used in a transaction.
