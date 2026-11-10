@@ -11,12 +11,11 @@
  * ```
  */
 
-import { getTransferSolInstruction } from '@solana-program/system';
 import {
     AccountRole,
     type Address,
     appendTransactionMessageInstruction,
-    appendTransactionMessageInstructions,
+    appendTransactionMessageInstructionPlan,
     assertIsTransactionWithBlockhashLifetime,
     type Blockhash,
     compileTransactionMessage,
@@ -27,6 +26,7 @@ import {
     getCompiledTransactionMessageEncoder,
     getSignatureFromTransaction,
     type Instruction,
+    type InstructionPlan,
     isWritableRole,
     type KeyPairSigner,
     pipe,
@@ -75,18 +75,6 @@ export const RELAY_CONFIG: V1TransactionConfig = {
 };
 
 /**
- * A System transfer whose source signs by promotion rather than with a key.
- *
- * `getTransferSolInstruction` wants a signer for the source, and the PDA has
- * no key. A noop signer carries its address and the signer role without ever
- * producing a signature; inside the execution message that role is all that
- * matters, and the Signer program makes it true when the action runs.
- */
-export function transferFromPda(pda: Address, destination: Address, amount: bigint): Instruction {
-    return getTransferSolInstruction({ amount, destination, source: createNoopSigner(pda) });
-}
-
-/**
  * A lifetime slot holding `value` instead of a blockhash. The execution
  * message carries the nonce there and the authorization message carries
  * zeros; neither is ever sent as a transaction, so the height is never read.
@@ -96,17 +84,23 @@ const lifetime = (value: string) => ({ blockhash: value as Blockhash, lastValidB
 /**
  * Builds the execution message: the action, as the PDA would send it.
  *
+ * The action is an instruction plan, which is what `@solana-program/token`
+ * and the other program clients hand back, so their helpers drop straight in.
+ * Wherever a key would sign, name the PDA with `createNoopSigner`: it carries
+ * the address and the signer role without producing a signature, and the
+ * Signer program makes the role true when the action runs.
+ *
  * The PDA is the fee payer and signer, which it could never be in a real
  * transaction; the executor fills those roles by CPI. The blockhash slot holds
  * the nonce value, and no transaction config is set because the message is
  * never runs as a transaction of its own.
  */
-export function executionMessage(pda: Address, instructions: Instruction[], nonce: Address): ReadonlyUint8Array {
+export function executionMessage(pda: Address, action: InstructionPlan, nonce: Address): ReadonlyUint8Array {
     const message = pipe(
         createTransactionMessage({ version: 1 }),
         m => setTransactionMessageFeePayer(pda, m),
         m => setTransactionMessageLifetimeUsingBlockhash(lifetime(nonce), m),
-        m => appendTransactionMessageInstructions(instructions, m),
+        m => appendTransactionMessageInstructionPlan(action, m),
     );
     return getCompiledTransactionMessageEncoder().encode(compileTransactionMessage(message));
 }
@@ -226,9 +220,4 @@ export async function relayTransaction(
 export async function sendRelay(clients: Clients, transaction: RelayTransaction): Promise<Signature> {
     await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
     return getSignatureFromTransaction(transaction);
-}
-
-/** The addresses whose signatures a compiled transaction carries. */
-export function signersOf(transaction: Transaction): Address[] {
-    return Object.keys(transaction.signatures) as Address[];
 }

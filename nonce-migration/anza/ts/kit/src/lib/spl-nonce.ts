@@ -19,15 +19,12 @@ import {
     sequentialInstructionPlan,
 } from '@solana/kit';
 
-import { getInitializeInstruction, NONCE_PROGRAM_ADDRESS } from '../client';
+import { getInitializeInstruction, getNonceEncoder, NONCE_PROGRAM_ADDRESS } from '../client';
 import { sendTransactions } from './cluster';
 import type { Clients } from './rpc';
 
 /** The domain tag the Nonce program hashes into every successor value. */
 const NONCE_STEP_TAG = 'spl-nonce::step::v1';
-
-/** `Nonce::LEN`: a 32-byte value, a 32-byte authority, and a u64 slot. */
-export const NONCE_SIZE = 72;
 
 /**
  * Creates and initializes a nonce account for `authority`, paid for by `payer`.
@@ -39,7 +36,8 @@ export const NONCE_SIZE = 72;
  */
 export async function createNonceAccount(clients: Clients, payer: KeyPairSigner, authority: Address): Promise<Address> {
     const nonceAccount = await generateKeyPairSigner();
-    const rent = await clients.rpc.getMinimumBalanceForRentExemption(BigInt(NONCE_SIZE)).send();
+    const space = BigInt(getNonceEncoder().fixedSize);
+    const rent = await clients.rpc.getMinimumBalanceForRentExemption(space).send();
     await sendTransactions(
         clients,
         payer,
@@ -49,7 +47,7 @@ export async function createNonceAccount(clients: Clients, payer: KeyPairSigner,
                 newAccount: nonceAccount,
                 payer,
                 programAddress: NONCE_PROGRAM_ADDRESS,
-                space: BigInt(NONCE_SIZE),
+                space,
             }),
             getInitializeInstruction({ authority, nonceAccount: nonceAccount.address }),
         ]),

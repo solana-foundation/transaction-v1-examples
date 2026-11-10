@@ -11,15 +11,14 @@ use psigner::signer::{
     sign_authorization,
 };
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
-use psigner::token::{
-    associated_token_address, create_mint, fetch_balance, mint_to_ata, transfer_to_ata,
-};
+use psigner::token::{create_mint, fetch_balance, mint_to_ata, transfer_to_ata};
 use psigner::DEFAULT_RPC_URL;
 use solana_address::Address;
 use solana_keypair::Keypair;
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
+use spl_associated_token_account_interface::address::get_associated_token_address;
 
 fn rpc_url() -> String {
     std::env::var("PSIGNER_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
@@ -183,7 +182,7 @@ fn a_cold_signed_token_withdrawal_creates_the_destination_and_lands() -> Result<
     let predicted = next_nonce(&s.nonce_account, &execution);
 
     s.relay(&authorization, signature).unwrap();
-    let recipient_account = associated_token_address(&recipient, &mint);
+    let recipient_account = get_associated_token_address(&recipient, &mint);
     assert_eq!(fetch_balance(&s.client, &recipient_account)?, 250_000_000);
     assert_eq!(fetch_balance(&s.client, &pda_account)?, 750_000_000);
     assert_eq!(s.nonce()?, predicted);

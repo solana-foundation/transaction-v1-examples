@@ -9,13 +9,14 @@ use psigner::signer::{
     authorization_message, execution_message, programmatic_signer_address, sign_authorization,
 };
 use psigner::spl_nonce::next_nonce;
-use psigner::token::{associated_token_address, transfer_to_ata};
+use psigner::token::transfer_to_ata;
 use solana_address::Address;
 use solana_hash::Hash;
 use solana_keypair::Keypair;
 use solana_message::v1;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
+use spl_associated_token_account_interface::address::get_associated_token_address;
 use spl_nonce_interface::state::Nonce;
 
 /// Fixed inputs. The authority's secret key is 32 bytes of 7, which kit's
@@ -188,12 +189,12 @@ fn a_token_withdrawal_creates_the_destination_and_transfers_as_the_pda() {
     assert_eq!(instructions[1].program_id, spl_token_interface::ID);
     assert_eq!(
         instructions[1].accounts[0].pubkey,
-        associated_token_address(&pda, &MINT),
+        get_associated_token_address(&pda, &MINT),
         "out of the PDA's associated token account"
     );
     assert_eq!(
         instructions[1].accounts[2].pubkey,
-        associated_token_address(&RECIPIENT, &MINT),
+        get_associated_token_address(&RECIPIENT, &MINT),
         "into the recipient's"
     );
     assert_eq!(

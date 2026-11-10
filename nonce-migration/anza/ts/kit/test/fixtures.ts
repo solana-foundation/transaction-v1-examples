@@ -3,7 +3,17 @@
  * by `rust/tests/wire.rs`. The TypeScript port must match byte for byte.
  */
 
-import { type Address, createKeyPairFromPrivateKeyBytes, getAddressFromPublicKey } from '@solana/kit';
+import { getTransferSolInstruction } from '@solana-program/system';
+import { getTransferToATAInstructionPlanAsync } from '@solana-program/token';
+import {
+    type Address,
+    createKeyPairFromPrivateKeyBytes,
+    createNoopSigner,
+    getAddressFromPublicKey,
+    singleInstructionPlan,
+} from '@solana/kit';
+
+import { DECIMALS } from '../src/lib/token';
 
 export const AUTHORITY_SEED = new Uint8Array(32).fill(7);
 export const RECIPIENT = '8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR' as Address; // [2; 32]
@@ -35,3 +45,18 @@ export const MINT = 'LbUiWL3xVV8hTFYBVdbTNrpDo41NKS6o3LHHuDzjfcY' as Address; //
  */
 export const EXPECTED_TOKEN_EXECUTION_MESSAGE =
     'gQEABQAAAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAIIuClYJxaE8PfFX0Fxd3EtIhv5ZXrMsG//+NmM+H1hj3aA/PR7QF250FyMH2Mx66MuKRQ6hPcnvzA+qLmgC39Zc6ti4cNWPY4zevC9Pc6B8gukAsWYMR7GfDTCMEY38J2ZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKmMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQcGAQAGBAoAAAEEBQMGAQIFAQAMgJaYAAAAAAAG';
+
+/** The action `sign-relay` signs: a SOL transfer out of the PDA. */
+export const solTransfer = (pda: Address, destination: Address, amount: bigint) =>
+    singleInstructionPlan(getTransferSolInstruction({ amount, destination, source: createNoopSigner(pda) }));
+
+/** The action `token-transfer` signs: a token transfer out of the PDA, creating the recipient's account. */
+export const tokenTransfer = (mint: Address, pda: Address, recipient: Address, amount: bigint) =>
+    getTransferToATAInstructionPlanAsync({
+        amount,
+        authority: createNoopSigner(pda),
+        decimals: DECIMALS,
+        mint,
+        payer: createNoopSigner(pda),
+        recipient,
+    });

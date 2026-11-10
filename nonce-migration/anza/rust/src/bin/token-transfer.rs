@@ -15,13 +15,12 @@ use psigner::signer::{
     sign_authorization, Artifact,
 };
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
-use psigner::token::{
-    associated_token_address, create_mint, fetch_balance, mint_to_ata, transfer_to_ata, ui_amount,
-};
+use psigner::token::{create_mint, fetch_balance, mint_to_ata, transfer_to_ata, ui_amount};
 use psigner::DEFAULT_RPC_URL;
 use solana_keypair::Keypair;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
+use spl_associated_token_account_interface::address::get_associated_token_address;
 
 /// 1,000 tokens at six decimals: what the PDA holds.
 const SUPPLY: u64 = 1_000_000_000;
@@ -119,7 +118,7 @@ fn main() -> Result<()> {
     }
 
     println!("\n== read back ==");
-    let recipient_account = associated_token_address(&recipient, &mint);
+    let recipient_account = get_associated_token_address(&recipient, &mint);
     let received = fetch_balance(&client, &recipient_account)?;
     println!(
         "  recipient account: {recipient_account} holds {} (created by the PDA, which paid its rent)",

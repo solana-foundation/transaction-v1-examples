@@ -8,7 +8,8 @@
  */
 
 import { getTransferSolInstruction } from '@solana-program/system';
-import { generateKeyPairSigner, lamports, singleInstructionPlan } from '@solana/kit';
+import { getTransferToATAInstructionPlanAsync } from '@solana-program/token';
+import { createNoopSigner, generateKeyPairSigner, lamports, singleInstructionPlan } from '@solana/kit';
 
 import { fetchNonce } from './client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions } from './lib/cluster';
@@ -23,7 +24,7 @@ import {
     signAuthorization,
 } from './lib/signer';
 import { createNonceAccount, nextNonce } from './lib/spl-nonce';
-import { associatedTokenAddress, createMint, fetchBalance, mintToAta, uiAmount, transferToAta } from './lib/token';
+import { associatedTokenAddress, createMint, DECIMALS, fetchBalance, mintToAta, uiAmount } from './lib/token';
 
 /** 1,000 tokens at six decimals: what the PDA holds. */
 const SUPPLY = 1_000_000_000n;
@@ -61,11 +62,20 @@ const { nonce } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'co
 console.log(`  nonce account: ${nonceAccount}`);
 console.log(`  nonce:         ${nonce}`);
 
-// The cold side: two ordinary token instructions with the PDA as payer and
-// owner, compiled into an execution message, wrapped in an authorization
+// The cold side: `transferToATA` from the token client, with the PDA as payer
+// and owner (a noop signer names it, since it has no key), compiled into an execution message, wrapped in an authorization
 // message, and signed. Nothing here needs an RPC.
 console.log('\n== signed on the cold side ==');
-const execution = executionMessage(pda, await transferToAta(mint, pda, recipient, AMOUNT), nonce);
+const pdaSigner = createNoopSigner(pda);
+const withdrawal = await getTransferToATAInstructionPlanAsync({
+    amount: AMOUNT,
+    authority: pdaSigner,
+    decimals: DECIMALS,
+    mint,
+    payer: pdaSigner,
+    recipient,
+});
+const execution = executionMessage(pda, withdrawal, nonce);
 const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
 const signature = await signAuthorization(authorization, authority);
 const predicted = await nextNonce(nonceAccount, nonce, execution);

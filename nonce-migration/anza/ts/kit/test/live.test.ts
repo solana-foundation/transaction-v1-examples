@@ -26,10 +26,10 @@ import {
     relayTransaction,
     sendRelay,
     signAuthorization,
-    transferFromPda,
 } from '../src/lib/signer';
 import { createNonceAccount, nextNonce } from '../src/lib/spl-nonce';
-import { associatedTokenAddress, createMint, fetchBalance, mintToAta, transferToAta } from '../src/lib/token';
+import { associatedTokenAddress, createMint, fetchBalance, mintToAta } from '../src/lib/token';
+import { solTransfer, tokenTransfer } from './fixtures';
 
 const live = process.env.PSIGNER_LIVE === '1';
 
@@ -88,7 +88,7 @@ describe.skipIf(!live)('sign-relay', () => {
         ).data;
         expect(nonceAuthority).toBe(pda);
 
-        const execution = executionMessage(pda, [transferFromPda(pda, recipient, 1_000_000n)], nonce);
+        const execution = executionMessage(pda, solTransfer(pda, recipient, 1_000_000n), nonce);
         const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
         const signature = await signAuthorization(authorization, authority);
         const predicted = await nextNonce(nonceAccount, nonce, execution);
@@ -109,12 +109,12 @@ describe.skipIf(!live)('sign-relay', () => {
         const recipient = (await generateKeyPairSigner()).address;
 
         // Sign one amount, relay another.
-        const signed = executionMessage(pda, [transferFromPda(pda, recipient, 1_000_000n)], await nonce());
+        const signed = executionMessage(pda, solTransfer(pda, recipient, 1_000_000n), await nonce());
         const signature = await signAuthorization(
             authorizationMessage(signed, nonceAccount, pda, authority.address),
             authority,
         );
-        const edited = executionMessage(pda, [transferFromPda(pda, recipient, 2_000_000n)], await nonce());
+        const edited = executionMessage(pda, solTransfer(pda, recipient, 2_000_000n), await nonce());
         const authorization = authorizationMessage(edited, nonceAccount, pda, authority.address);
         await expectCustomError(
             sendRelay(clients, await relayTransaction(clients, authorization, [signature], relayer)),
@@ -134,7 +134,7 @@ describe.skipIf(!live)('token-transfer', () => {
         const pdaAccount = await mintToAta(clients, relayer, mint, pda, 1_000_000_000n);
         const initial = await nonce();
 
-        const execution = executionMessage(pda, await transferToAta(mint, pda, recipient, 250_000_000n), initial);
+        const execution = executionMessage(pda, await tokenTransfer(mint, pda, recipient, 250_000_000n), initial);
         const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
         const signature = await signAuthorization(authorization, authority);
         const predicted = await nextNonce(nonceAccount, initial, execution);

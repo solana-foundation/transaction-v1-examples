@@ -14,6 +14,7 @@
 
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
+    createNoopSigner,
     generateKeyPairSigner,
     getCompiledTransactionMessageDecoder,
     getTransactionSize,
@@ -41,8 +42,6 @@ import {
     relayTransaction,
     sendRelay,
     signAuthorization,
-    signersOf,
-    transferFromPda,
 } from './lib/signer';
 import { createNonceAccount, nextNonce } from './lib/spl-nonce';
 
@@ -64,7 +63,7 @@ const durableNonce = await fetchDurableNonce(clients.rpc, durableNonceAccount);
 const durable = await signDurableNonceTransfer(cold, durableNonceAccount, durableNonce, recipient, AMOUNT);
 console.log(`  nonce account: ${durableNonceAccount}`);
 console.log(`  nonce:         ${durableNonce}`);
-console.log(`  signed by:     ${json(signersOf(durable))} (the cold key, which also pays)`);
+console.log(`  signed by:     ${json(Object.keys(durable.signatures))} (the cold key, which also pays)`);
 console.log(`  size:          ${getTransactionSize(durable)} bytes`);
 console.log(`  landed:        ${await sendDurableNonceTransaction(clients, durable)}`);
 console.log(
@@ -100,8 +99,10 @@ console.log(`  nonce:         ${nonce}`);
 // authorization message, and the signature can all be produced air-gapped
 // once the nonce value is known.
 console.log('\n== signed on the cold side ==');
-const transfer = transferFromPda(pda, recipient, AMOUNT);
-const execution = executionMessage(pda, [transfer], nonce);
+// The action is an ordinary System transfer out of the PDA. The builder wants
+// a signer for the source and the PDA has no key, so a noop signer names it.
+const transfer = getTransferSolInstruction({ amount: AMOUNT, destination: recipient, source: createNoopSigner(pda) });
+const execution = executionMessage(pda, singleInstructionPlan(transfer), nonce);
 const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
 const signature = await signAuthorization(authorization, authority);
 const predicted = await nextNonce(nonceAccount, nonce, execution);
@@ -131,7 +132,7 @@ if (process.env.PSIGNER_SKIP_EXPIRY) {
 // The hot side. Any funded key can relay; it learns nothing it can change.
 console.log('\n== relayed ==');
 const relay = await relayTransaction(clients, authorization, [signature], relayer);
-const relaySigners = signersOf(relay);
+const relaySigners = Object.keys(relay.signatures);
 if (relaySigners.includes(authority.address)) {
     throw new Error('the authority must not sign the relay transaction');
 }

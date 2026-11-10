@@ -13,17 +13,12 @@ import {
     findAssociatedTokenPda,
     getCreateMintInstructionPlan,
     getMintToATAInstructionPlanAsync,
-    getTransferToATAInstructionPlanAsync,
     TOKEN_PROGRAM_ADDRESS,
 } from '@solana-program/token';
 import {
     type Address,
     createClientWithGetMinimumBalanceFromRpc,
-    createNoopSigner,
-    flattenInstructionPlan,
     generateKeyPairSigner,
-    type Instruction,
-    isSingleInstructionPlan,
     type KeyPairSigner,
 } from '@solana/kit';
 
@@ -91,37 +86,4 @@ export async function fetchBalance(rpc: Clients['rpc'], account: Address): Promi
 export function uiAmount(amount: bigint): string {
     const unit = 10n ** BigInt(DECIMALS);
     return `${amount / unit}.${(amount % unit).toString().padStart(DECIMALS, '0')}`;
-}
-
-/**
- * The instructions that move `amount` of `mint` from the PDA to `recipient`,
- * for the PDA to sign by promotion inside an execution message: create
- * `recipient`'s associated token account if it does not exist, with the PDA
- * paying the rent, then `TransferChecked` out of the PDA's own, with the PDA
- * as the owner.
- *
- * `@solana-program/token` builds that pair as a plan to send; an execution
- * message embeds instructions, so the plan is flattened back into them. The
- * helper wants a signer wherever a key would sign, and the PDA has no key. A
- * noop signer carries its address and the signer role without ever producing
- * a signature; the Signer program supplies that when the action runs.
- */
-export async function transferToAta(
-    mint: Address,
-    pda: Address,
-    recipient: Address,
-    amount: bigint,
-): Promise<Instruction[]> {
-    const signer = createNoopSigner(pda);
-    const plan = await getTransferToATAInstructionPlanAsync({
-        amount,
-        authority: signer,
-        decimals: DECIMALS,
-        mint,
-        payer: signer,
-        recipient,
-    });
-    return flattenInstructionPlan(plan)
-        .filter(isSingleInstructionPlan)
-        .map(({ instruction }) => instruction);
 }

@@ -76,11 +76,6 @@ pub fn mint_to_ata(
     Ok(account)
 }
 
-/// `owner`'s associated token account for `mint`.
-pub fn associated_token_address(owner: &Address, mint: &Address) -> Address {
-    get_associated_token_address(owner, mint)
-}
-
 /// The balance of a token account, in base units.
 pub fn fetch_balance(client: &RpcClient, account: &Address) -> Result<u64> {
     let data = client
