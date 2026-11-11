@@ -6,14 +6,12 @@
 //! Run with `just token-transfer`.
 
 use anyhow::{bail, Result};
-use clap::Parser;
 use psigner::cluster::{
     assert_programs_deployed, client, compute_units, funded_keypair, send_transaction,
 };
 use psigner::signer::execution_message;
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::token::{create_mint, fetch_balance, mint_to_ata, transfer_to_ata, ui_amount};
-use psigner::DEFAULT_RPC_URL;
 use solana_keypair::Keypair;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
@@ -27,16 +25,8 @@ const SUPPLY: u64 = 1_000_000_000;
 /// 250 tokens: what the withdrawal moves.
 const AMOUNT: u64 = 250_000_000;
 
-#[derive(Parser)]
-#[command(about = "Sign a token withdrawal offline with a cold key and relay it later")]
-struct Args {
-    #[arg(long, env = "PSIGNER_RPC_URL", default_value = DEFAULT_RPC_URL)]
-    rpc_url: String,
-}
-
 fn main() -> Result<()> {
-    let args = Args::parse();
-    let client = client(&args.rpc_url);
+    let client = client();
     assert_programs_deployed(&client)?;
 
     let relayer = funded_keypair(&client, 5_000_000_000)?;

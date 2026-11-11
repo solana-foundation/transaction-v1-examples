@@ -18,6 +18,8 @@ use solana_transaction_status_client_types::UiTransactionEncoding;
 use std::thread::sleep;
 use std::time::Duration;
 
+use crate::DEFAULT_RPC_URL;
+
 /// The budget every transaction the examples send requests.
 ///
 /// Unset v1 limits are zero, not the legacy defaults, so each transaction
@@ -35,9 +37,11 @@ pub const PROGRAMS: [(&str, Address); 3] = [
     ("SPL Message Executor", spl_message_executor_interface::ID),
 ];
 
-/// Connects at `confirmed` commitment, which every example and test uses.
-pub fn client(rpc_url: &str) -> RpcClient {
-    RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed())
+/// Connects to the endpoint named by `PSIGNER_RPC_URL`, or a local validator,
+/// at `confirmed` commitment, which every example and test uses.
+pub fn client() -> RpcClient {
+    let rpc_url = std::env::var("PSIGNER_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string());
+    RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed())
 }
 
 /// Throws unless all three programs are deployed on the cluster behind `client`.

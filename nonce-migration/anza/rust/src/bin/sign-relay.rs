@@ -11,7 +11,6 @@
 //! Run with `just sign-relay`.
 
 use anyhow::{bail, Result};
-use clap::Parser;
 use psigner::cluster::{
     assert_programs_deployed, client, compute_units, funded_keypair, send_transaction,
     wait_for_blockhash_expiry,
@@ -21,7 +20,6 @@ use psigner::durable_nonce::{
 };
 use psigner::signer::execution_message;
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
-use psigner::DEFAULT_RPC_URL;
 use solana_commitment_config::CommitmentConfig;
 use solana_keypair::Keypair;
 use solana_message::VersionedMessage;
@@ -34,19 +32,8 @@ use spl_message_executor_client::instruction::execute;
 
 const AMOUNT: u64 = 10_000_000;
 
-#[derive(Parser)]
-#[command(about = "Sign a transfer offline with a cold key and relay it later")]
-struct Args {
-    #[arg(long, env = "PSIGNER_RPC_URL", default_value = DEFAULT_RPC_URL)]
-    rpc_url: String,
-    /// Relay immediately instead of waiting for the signing-time blockhash to expire.
-    #[arg(long, env = "PSIGNER_SKIP_EXPIRY")]
-    skip_expiry: bool,
-}
-
 fn main() -> Result<()> {
-    let args = Args::parse();
-    let client = client(&args.rpc_url);
+    let client = client();
     assert_programs_deployed(&client)?;
 
     let relayer = funded_keypair(&client, 2_000_000_000)?;
@@ -133,7 +120,7 @@ fn main() -> Result<()> {
     // A transaction signed now would die with this blockhash. The artifact has
     // no blockhash, so it does not.
     let blockhash_at_signing = client.get_latest_blockhash()?;
-    if args.skip_expiry {
+    if std::env::var_os("PSIGNER_SKIP_EXPIRY").is_some() {
         println!("\n== skipping the wait for blockhash {blockhash_at_signing} to expire ==");
     } else {
         println!("\n== waiting for blockhash {blockhash_at_signing} to expire (about a minute) ==");

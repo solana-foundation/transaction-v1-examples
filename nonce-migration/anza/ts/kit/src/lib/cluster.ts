@@ -87,7 +87,3 @@ export async function waitForBlockhashExpiry(rpc: Client['rpc'], blockhash: Bloc
         await new Promise(resolve => setTimeout(resolve, 2_000));
     }
 }
-
-/** Serializes a value that may contain bigints. */
-export const json = (value: unknown, indent?: number) =>
-    JSON.stringify(value, (_, entry) => (typeof entry === 'bigint' ? `${entry}` : entry), indent);

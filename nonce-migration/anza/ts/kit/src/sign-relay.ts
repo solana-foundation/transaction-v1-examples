@@ -34,7 +34,7 @@ import {
     unwrapSimulationError,
 } from '@solana/kit';
 
-import { assertProgramsDeployed, createFundedClient, json, waitForBlockhashExpiry } from './lib/cluster';
+import { assertProgramsDeployed, createFundedClient, waitForBlockhashExpiry } from './lib/cluster';
 import { createDurableNonceAccount, signDurableNonceTransfer } from './lib/durable-nonce';
 import { authorizationMessage, executionMessage } from './lib/signer';
 import { createNonceAccount, nextNonce } from './lib/spl-nonce';
@@ -57,7 +57,7 @@ const durableNonce = await fetchDurableNonce();
 const durable = await signDurableNonceTransfer(cold, durableNonceAccount, durableNonce, recipient, AMOUNT);
 console.log(`  nonce account: ${durableNonceAccount}`);
 console.log(`  nonce:         ${durableNonce}`);
-console.log(`  signed by:     ${json(Object.keys(durable.signatures))} (the cold key, which also pays)`);
+console.log(`  signed by:     ${JSON.stringify(Object.keys(durable.signatures))} (the cold key, which also pays)`);
 console.log(`  size:          ${getTransactionSize(durable)} bytes`);
 await sendAndConfirmDurableNonceTransactionFactory(coldClient)(durable, { commitment: 'confirmed' });
 console.log(`  landed:        ${getSignatureFromTransaction(durable)}`);
@@ -102,7 +102,7 @@ if (decodedAuthorization.version !== 1) {
 console.log(`  execution message:     ${execution.length} bytes, 1 instruction (the transfer)`);
 console.log(`  authorization message: ${authorization.length} bytes, 1 instruction (Execute, wrapping it)`);
 console.log(
-    `  signers:               ${json(decodedAuthorization.staticAccounts.slice(0, decodedAuthorization.header.numSignerAccounts))}`,
+    `  signers:               ${JSON.stringify(decodedAuthorization.staticAccounts.slice(0, decodedAuthorization.header.numSignerAccounts))}`,
 );
 console.log(`  signature:             ${getBase58Decoder().decode(signature)}`);
 console.log(`  next nonce:            ${predicted} (known before anything is sent)`);
@@ -129,7 +129,7 @@ if (relaySigners.includes(authority.address)) {
     throw new Error('the authority must not sign the relay transaction');
 }
 console.log(
-    `  relay transaction: ${getTransactionSize(relay.transaction)} bytes, v1, signed by ${json(relaySigners)} (the relayer)`,
+    `  relay transaction: ${getTransactionSize(relay.transaction)} bytes, v1, signed by ${JSON.stringify(relaySigners)} (the relayer)`,
 );
 console.log(`  landed:            ${relay.signature}`);
 const fetched = await relayer.rpc

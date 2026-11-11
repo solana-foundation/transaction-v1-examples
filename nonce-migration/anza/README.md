@@ -115,18 +115,16 @@ The next nonce is known before anything is sent because an SPL nonce advances to
 
 ## Configuration
 
-Every example reads its endpoints from the environment; the Rust binary also accepts equivalent flags.
+Every example reads its settings from the environment.
 
 | Variable | Default | Used by |
 |---|---|---|
 | `PSIGNER_RPC_URL` | `http://127.0.0.1:8899` | all examples and tests |
 | `PSIGNER_RPC_SUBSCRIPTIONS_URL` | `ws://127.0.0.1:8900` | TypeScript examples and tests |
-| `PSIGNER_SKIP_EXPIRY` | unset | set to `true` to relay without waiting for the signing-time blockhash to expire |
+| `PSIGNER_SKIP_EXPIRY` | unset | set to any value to relay without waiting for the signing-time blockhash to expire |
 | `PSIGNER_LIVE` | unset | set to `1` to un-skip the TypeScript live tests |
 | `PSIGNER_PROGRAM_SOURCE` | `build` | set to `dump` to have `just validator-start` copy devnet's binaries instead of building |
 | `PSIGNER_COMMIT` | set by `just` | the pinned commit the scripts clone |
-
-Rust flags: `--rpc-url`, `--skip-expiry`.
 
 ## Testing
 

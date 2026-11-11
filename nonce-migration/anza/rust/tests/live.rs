@@ -9,7 +9,6 @@ use psigner::cluster::{assert_programs_deployed, client, funded_keypair, send_tr
 use psigner::signer::execution_message;
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::token::{create_mint, fetch_balance, mint_to_ata, transfer_to_ata};
-use psigner::DEFAULT_RPC_URL;
 use solana_address::Address;
 use solana_instruction::Instruction;
 use solana_keypair::Keypair;
@@ -24,10 +23,6 @@ use spl_ed25519_signer_client::signing::sign_and_submit;
 use spl_ed25519_signer_client::ProgrammaticSigner;
 use spl_message_executor_client::instruction::execute;
 
-fn rpc_url() -> String {
-    std::env::var("PSIGNER_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
-}
-
 /// A funded relayer, a cold authority, its PDA holding 0.1 SOL, and a nonce
 /// account the PDA controls.
 struct Setup {
@@ -39,7 +34,7 @@ struct Setup {
 }
 
 fn setup() -> Result<Setup> {
-    let client = client(&rpc_url());
+    let client = client();
     assert_programs_deployed(&client)?;
     let relayer = funded_keypair(&client, 5_000_000_000)?;
     let authority = Keypair::new();

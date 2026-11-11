@@ -13,7 +13,6 @@ all = { level = "deny", priority = -1 }
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive", "env"] }
 
 # The client crates are not published: on crates.io they are 0.1.0 placeholders,
 # and only spl-nonce-interface has a release. Every crate is pinned to one commit
