@@ -12,6 +12,11 @@
  */
 
 import {
+    findProgrammaticSignerPda,
+    getExecuteInstruction,
+    getSubmitInstruction,
+} from '@solana-program/ed25519-programmatic-signer';
+import {
     AccountRole,
     type Address,
     appendTransactionMessageInstruction,
@@ -46,7 +51,6 @@ import {
     type V1TransactionConfig,
 } from '@solana/kit';
 
-import { findProgrammaticSignerPda, getExecuteInstruction, getSubmitInstruction } from '../client';
 import type { Clients } from './rpc';
 
 /**

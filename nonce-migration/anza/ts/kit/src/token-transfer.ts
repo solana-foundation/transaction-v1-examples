@@ -7,11 +7,11 @@
  * Run with `just ts-token-transfer`.
  */
 
+import { fetchNonce } from '@solana-program/ed25519-programmatic-signer';
 import { getTransferSolInstruction } from '@solana-program/system';
 import { getTransferToATAInstructionPlanAsync } from '@solana-program/token';
 import { createNoopSigner, generateKeyPairSigner, lamports, singleInstructionPlan } from '@solana/kit';
 
-import { fetchNonce } from './client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions } from './lib/cluster';
 import { createClients, json } from './lib/rpc';
 import {

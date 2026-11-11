@@ -4,6 +4,7 @@
  * the Anza client crate.
  */
 
+import { MESSAGE_EXECUTOR_PROGRAM_ADDRESS } from '@solana-program/ed25519-programmatic-signer';
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
 import {
     getBase64Decoder,
@@ -15,7 +16,6 @@ import {
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
-import { MESSAGE_EXECUTOR_PROGRAM_ADDRESS } from '../src/client';
 import { authorizationMessage, executionMessage, programmaticSignerAddress } from '../src/lib/signer';
 import { nextNonce } from '../src/lib/spl-nonce';
 import { associatedTokenAddress } from '../src/lib/token';

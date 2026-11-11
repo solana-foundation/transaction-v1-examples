@@ -3378,7 +3378,7 @@ dependencies = [
 [[package]]
 name = "spl-ed25519-signer-client"
 version = "0.1.0"
-source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=f9322a06c1cd7a9e05a78a55c94f7799edcb247b#f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=cf46a93238154cc681169f096c4dffd6188f1491#cf46a93238154cc681169f096c4dffd6188f1491"
 dependencies = [
  "solana-address 2.6.1",
  "solana-hash",
@@ -3393,7 +3393,7 @@ dependencies = [
 [[package]]
 name = "spl-ed25519-signer-interface"
 version = "0.1.0"
-source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=f9322a06c1cd7a9e05a78a55c94f7799edcb247b#f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=cf46a93238154cc681169f096c4dffd6188f1491#cf46a93238154cc681169f096c4dffd6188f1491"
 dependencies = [
  "solana-address 2.6.1",
  "solana-message",
@@ -3415,7 +3415,7 @@ dependencies = [
 [[package]]
 name = "spl-message-executor-client"
 version = "0.1.0"
-source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=f9322a06c1cd7a9e05a78a55c94f7799edcb247b#f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=cf46a93238154cc681169f096c4dffd6188f1491#cf46a93238154cc681169f096c4dffd6188f1491"
 dependencies = [
  "solana-address 2.6.1",
  "solana-instruction",
@@ -3427,7 +3427,7 @@ dependencies = [
 [[package]]
 name = "spl-message-executor-interface"
 version = "0.1.0"
-source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=f9322a06c1cd7a9e05a78a55c94f7799edcb247b#f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=cf46a93238154cc681169f096c4dffd6188f1491#cf46a93238154cc681169f096c4dffd6188f1491"
 dependencies = [
  "solana-address 2.6.1",
  "solana-hash",
@@ -3440,7 +3440,7 @@ dependencies = [
 [[package]]
 name = "spl-nonce-client"
 version = "0.1.0"
-source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=f9322a06c1cd7a9e05a78a55c94f7799edcb247b#f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=cf46a93238154cc681169f096c4dffd6188f1491#cf46a93238154cc681169f096c4dffd6188f1491"
 dependencies = [
  "solana-address 2.6.1",
  "solana-hash",
@@ -3454,7 +3454,7 @@ dependencies = [
 [[package]]
 name = "spl-nonce-interface"
 version = "0.1.0"
-source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=f9322a06c1cd7a9e05a78a55c94f7799edcb247b#f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+source = "git+https://github.com/solana-program/ed25519-programmatic-signer?rev=cf46a93238154cc681169f096c4dffd6188f1491#cf46a93238154cc681169f096c4dffd6188f1491"
 dependencies = [
  "solana-address 2.6.1",
  "solana-hash",

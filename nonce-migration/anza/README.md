@@ -30,7 +30,7 @@ just sign-relay       # …then any example below
 just validator-stop
 ```
 
-Nothing is published yet: the Anza repo has no releases, the crates on crates.io are placeholders, and the npm package returns 404. Everything here is pinned to one commit of [solana-program/ed25519-programmatic-signer](https://github.com/solana-program/ed25519-programmatic-signer), named once in the `Justfile`. `just setup-programs` builds the programs from it with `cargo build-sbf`; pass `dump` to copy the binaries deployed on devnet instead, which Anza redeploys from main.
+The TypeScript examples use the released [`@solana-program/ed25519-programmatic-signer`](https://www.npmjs.com/package/@solana-program/ed25519-programmatic-signer) client. The programs and the Rust client crates have no release yet, so they are pinned to the commit that client was built from, the [`clients-js@v1.0.0`](https://github.com/solana-program/ed25519-programmatic-signer/tree/clients-js%40v1.0.0) tag, named once in the `Justfile`. `just setup-programs` builds the programs from it with `cargo build-sbf`; pass `dump` to copy the binaries deployed on devnet instead, which Anza redeploys from main.
 
 ## Examples
 
@@ -50,9 +50,9 @@ The five operations in the directory README map onto the shared modules in [`rus
 ## The three layers
 
 ```text
-relay transaction          signed by the hot relayer, fresh blockhash, pays the fee, 913 bytes, v1
+relay transaction          signed by the hot relayer, fresh blockhash, pays the fee, 979 bytes, v1
 └─ Submit instruction      to the Signer program, carrying the authority signatures
-   └─ authorization message    signed by the cold authority, no blockhash, no expiry, 433 bytes, v1
+   └─ authorization message    signed by the cold authority, no blockhash, no expiry, 466 bytes, v1
       └─ Execute instruction   to the Executor program
          └─ execution message      fee payer and signer are the PDA, "blockhash" is the nonce, 156 bytes, v1
             └─ the action          an ordinary System transfer from the PDA
@@ -60,7 +60,7 @@ relay transaction          signed by the hot relayer, fresh blockhash, pays the 
 
 The cold key signs the authorization message's bytes, which is signing a Solana message, so hardware wallets and custody systems can at least ingest it. Inside, the authorization message has exactly one instruction, `Execute`, whose data is the execution message. Inside that, the execution message names the PDA as fee payer and signer, which it could never be in a real transaction: the Signer program promotes the PDA to a signer by CPI once the authority's signature verifies, and the Executor runs the action's instructions with that promoted signer.
 
-Every account key appears once per layer, which is where most of the 913 bytes go. [`rust/src/signer.rs`](rust/src/signer.rs) and [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) build each layer in turn.
+Every account key appears once per layer, which is where most of the 979 bytes go. [`rust/src/signer.rs`](rust/src/signer.rs) and [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) build each layer in turn.
 
 ## What crosses the air gap
 
@@ -95,19 +95,19 @@ The relayer cannot change the amount, the recipient, or the nonce without invali
 
 **The Anza CLI dumps legacy messages.** `solana transfer --sign-only --dump-transaction-message` emits a legacy message and the Executor accepts only v1, so a CLI-built action has to be recompiled before signing. The examples build the execution message directly instead.
 
-**`@solana-program/ed25519-programmatic-signer` is not on npm.** [`scripts/vendor-ts-client.sh`](scripts/vendor-ts-client.sh) copies the generated `@solana/kit` client out of the pinned commit into [`ts/kit/src/client/`](ts/kit/src/client), the way `transaction-v1` checks in generated protobuf bindings. The generated client has instruction builders and account decoders but no helper for the authorization message, the next nonce, or creating a nonce account, which the Rust client crates do have; [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) and [`ts/kit/src/lib/spl-nonce.ts`](ts/kit/src/lib/spl-nonce.ts) fill those gaps with kit calls, and [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) checks the result against the Rust client crate.
+**The JavaScript client has no helper for three things the Rust client crates do.** `@solana-program/ed25519-programmatic-signer` has instruction builders and account decoders but nothing for the authorization message, the next nonce, or creating a nonce account. [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) and [`ts/kit/src/lib/spl-nonce.ts`](ts/kit/src/lib/spl-nonce.ts) fill those gaps with kit calls, and [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) checks the result against the Rust client crate.
 
 ## Version requirements
 
 | Component | Minimum | Why |
 |---|---|---|
 | Anza CLI / Agave | 4.4.1 | the current stable release; v1 transactions, which the relay uses, need 4.2.0 |
-| `ed25519-programmatic-signer` | commit `f9322a0` (5 Nov 2026) | no releases exist; the client crates, the vendored TypeScript client, and the programs all come from this commit |
+| `ed25519-programmatic-signer` | commit `cf46a93` (11 Nov 2026), tag `clients-js@v1.0.0` | the Rust client crates and the programs come from this commit; they have no release of their own |
+| `@solana-program/ed25519-programmatic-signer` | 1.0.0 | the generated kit client for the three programs, built from the same commit |
 | Rust | 1.93.1 | the toolchain the pinned Anza workspace builds with |
 | `solana-message` | 4.4.1 | the version the pinned Anza workspace uses; one `v1::Message` type across the client crates and these examples |
 | `@solana/kit` | 8.6.0 | `createTransactionMessage({ version: 1 })`, the v1 compiled-message codec, instruction plans, and `signBytes` |
 | `@solana-program/system` | 0.15.0 | the System nonce helpers for the durable nonce comparison |
-| `@solana-program/loader-v3` | 0.8.0 | the vendored client's account resolver imports it |
 | `spl-token-interface` | 3.0.0 | the version the pinned Anza CLI builds `migrate token` with; `spl-associated-token-account-interface` 2.0.0 alongside it |
 | `@solana-program/token` | 0.18.0 | the kit Token client; its `createMint`, `mintToATA`, and `transferToATA` instruction plans |
 
@@ -144,9 +144,8 @@ rust/src/             the Rust library they share
 rust/tests/           offline and live tests
 ts/kit/src/           @solana/kit example scripts, one per example
 ts/kit/src/lib/       the modules they share
-ts/kit/src/client/    the generated @solana/kit client, vendored from the pinned commit
 ts/kit/test/          offline and live tests
-scripts/              validator, program build, and client vendoring
+scripts/              validator and program build
 ```
 
 Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects, funds, sends setup transactions, and checks the programs are deployed; `spl_nonce` (`spl-nonce` in TypeScript) creates and reads SPL nonce accounts and predicts the next value; `signer` builds, signs, and relays the three layers; `token` creates a mint and token accounts, reads balances, and in Rust builds the PDA's withdrawal, which TypeScript takes straight from `@solana-program/token`; `durable_nonce` (`durable-nonce`) is the durable nonce flow for comparison.

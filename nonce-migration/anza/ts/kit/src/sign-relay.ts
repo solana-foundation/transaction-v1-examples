@@ -12,6 +12,7 @@
  * Run with `just ts-sign-relay`.
  */
 
+import { fetchNonce } from '@solana-program/ed25519-programmatic-signer';
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
     createNoopSigner,
@@ -25,7 +26,6 @@ import {
     SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
 } from '@solana/kit';
 
-import { fetchNonce } from './client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions, waitForBlockhashExpiry } from './lib/cluster';
 import {
     createDurableNonceAccount,

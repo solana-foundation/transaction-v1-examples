@@ -35,9 +35,9 @@ importers:
 
   kit:
     dependencies:
-      '@solana-program/loader-v3':
-        specifier: ^0.8.0
-        version: 0.8.0(@solana/kit@8.6.0(typescript@5.9.3))
+      '@solana-program/ed25519-programmatic-signer':
+        specifier: ^1.0.0
+        version: 1.0.0(@solana/kit@8.6.0(typescript@5.9.3))
       '@solana-program/system':
         specifier: ^0.15.0
         version: 0.15.0(@solana/kit@8.6.0(typescript@5.9.3))
@@ -595,6 +595,11 @@ packages:
         optional: true
       oxlint:
         optional: true
+
+  '@solana-program/ed25519-programmatic-signer@1.0.0':
+    resolution: {integrity: sha512-GsU9SUAvxX94ULEYfDqqZlPx+vDOP6bef4V2YxXRtNx8jOYyW9E40EoDK/BWL/wl7hf+gHyR6xrB6njxYKrcew==}
+    peerDependencies:
+      '@solana/kit': ^8.5.0
 
   '@solana-program/loader-v3@0.8.0':
     resolution: {integrity: sha512-WMtdoW24mAnBIOynbSwGCEFzIMe14sBOBnVxMALT9gjSLLTPHGkXd8ZcWqFSwx1IMTyGn7hUsZAM02atqvU9WQ==}
@@ -1657,6 +1662,11 @@ snapshots:
     optionalDependencies:
       oxfmt: 0.75.0
       oxlint: 1.92.0(oxlint-tsgolint@7.0.2006)
+
+  '@solana-program/ed25519-programmatic-signer@1.0.0(@solana/kit@8.6.0(typescript@5.9.3))':
+    dependencies:
+      '@solana-program/loader-v3': 0.8.0(@solana/kit@8.6.0(typescript@5.9.3))
+      '@solana/kit': 8.6.0(typescript@5.9.3)
 
   '@solana-program/loader-v3@0.8.0(@solana/kit@8.6.0(typescript@5.9.3))':
     dependencies:

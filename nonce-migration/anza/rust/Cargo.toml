@@ -18,15 +18,16 @@ clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Nothing is published: the crates on crates.io under these names are 0.1.0
-# placeholders Anza reserved in September. Every client crate is pinned to one
-# commit of the repo, the same one scripts/setup-programs.sh builds the programs
-# from, so the wire formats on both sides of the RPC cannot drift apart.
-spl-ed25519-signer-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "f9322a06c1cd7a9e05a78a55c94f7799edcb247b" }
-spl-message-executor-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "f9322a06c1cd7a9e05a78a55c94f7799edcb247b" }
-spl-message-executor-interface = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "f9322a06c1cd7a9e05a78a55c94f7799edcb247b" }
-spl-nonce-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "f9322a06c1cd7a9e05a78a55c94f7799edcb247b" }
-spl-nonce-interface = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "f9322a06c1cd7a9e05a78a55c94f7799edcb247b" }
+# The client crates are not published: on crates.io they are 0.1.0 placeholders,
+# and only spl-nonce-interface has a release. Every crate is pinned to one commit
+# of the repo, the clients-js@v1.0.0 tag, the same one scripts/setup-programs.sh
+# builds the programs from, so the wire formats on both sides of the RPC cannot
+# drift apart.
+spl-ed25519-signer-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-message-executor-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-message-executor-interface = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-nonce-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-nonce-interface = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
 
 # The token crates the pinned Anza CLI builds `migrate token` with, at the
 # versions its workspace pins.

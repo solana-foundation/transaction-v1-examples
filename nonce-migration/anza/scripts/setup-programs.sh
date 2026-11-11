@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Produces the three programmatic signer programs the local validator loads.
 #
-# Nothing is published: the Anza repo has no releases and the crates on crates.io
-# are placeholders. So the programs come from one of two places, both pinned to
-# the same commit the Rust and TypeScript clients in this directory depend on:
+# The programs are not distributed as binaries, so they come from one of two
+# places, both pinned to the commit the Rust and TypeScript clients in this
+# directory were built from:
 #
 #   build (default)  clone the pinned commit into .local/eps and `cargo build-sbf`
 #                    each program, which is what the repo's own Makefile does

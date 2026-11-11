@@ -13,6 +13,7 @@ use solana_message::{v1, VersionedMessage};
 use solana_rpc_client::rpc_client::RpcClient;
 use solana_signer::Signer;
 use spl_message_executor_interface::instruction::derive_transition_commitment;
+use spl_message_executor_interface::pda::TransitionSigner;
 use spl_nonce_interface::state::Nonce;
 
 use crate::cluster::send_transaction;
@@ -65,6 +66,7 @@ pub fn next_nonce(nonce_account: &Address, execution_message: &v1::Message) -> H
     .derive_next_nonce(
         &spl_nonce_interface::ID,
         nonce_account,
+        &TransitionSigner::ADDRESS,
         &derive_transition_commitment(&VersionedMessage::V1(execution_message.clone())),
     )
 }

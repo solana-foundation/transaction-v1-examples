@@ -1,9 +1,10 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 solana_version := "4.4.1"
-# solana-program/ed25519-programmatic-signer: the commit the client crates, the
-# vendored TypeScript client, and the programs the validator loads all come from.
-psigner_commit := "f9322a06c1cd7a9e05a78a55c94f7799edcb247b"
+# solana-program/ed25519-programmatic-signer at the clients-js@v1.0.0 tag: the
+# commit the Rust client crates and the programs the validator loads come from,
+# and the one the npm package the TypeScript examples depend on was built from.
+psigner_commit := "cf46a93238154cc681169f096c4dffd6188f1491"
 
 export PSIGNER_COMMIT := psigner_commit
 
@@ -25,10 +26,6 @@ setup-solana:
 # Build the three programs from the pinned commit into .local/programs/. Pass `dump` to copy devnet's binaries instead.
 setup-programs source="build":
     ./scripts/setup-programs.sh {{ source }}
-
-# Re-copy the generated @solana/kit client out of the pinned commit into ts/kit/src/client/.
-vendor-ts-client:
-    ./scripts/vendor-ts-client.sh
 
 # Formatting
 

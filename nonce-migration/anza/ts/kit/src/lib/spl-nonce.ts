@@ -7,6 +7,12 @@
  * examples is the programmatic signer PDA.
  */
 
+import {
+    findTransitionSignerPda,
+    getInitializeInstruction,
+    getNonceEncoder,
+    NONCE_PROGRAM_ADDRESS,
+} from '@solana-program/ed25519-programmatic-signer';
 import { getCreateAccountInstruction } from '@solana-program/system';
 import {
     type Address,
@@ -19,7 +25,6 @@ import {
     sequentialInstructionPlan,
 } from '@solana/kit';
 
-import { getInitializeInstruction, getNonceEncoder, NONCE_PROGRAM_ADDRESS } from '../client';
 import { sendTransactions } from './cluster';
 import type { Clients } from './rpc';
 
@@ -60,8 +65,9 @@ export async function createNonceAccount(clients: Clients, payer: KeyPairSigner,
  * JavaScript client has no helper for this yet; the Rust one does.
  *
  * A System nonce advances to an unpredictable future blockhash. An SPL nonce
- * advances to a hash of its current value and the message that ran, so the
- * signer knows the successor before anything is sent. That is what lets a
+ * advances to a hash of its current value, the Executor's transition signer,
+ * and the message that ran, so the signer knows the successor before anything
+ * is sent. That is what lets a
  * chain of actions be signed up front, each valid only after the one before.
  *
  * Mirrors `Nonce::derive_next_nonce` and `derive_transition_commitment` in the
@@ -74,12 +80,14 @@ export async function nextNonce(
     executionMessage: ReadonlyUint8Array,
 ): Promise<Address> {
     const addressEncoder = getAddressEncoder();
+    const [transitionSigner] = await findTransitionSignerPda();
     const transitionCommitment = await sha256(executionMessage);
     const next = await sha256(
         getUtf8Encoder().encode(NONCE_STEP_TAG),
         addressEncoder.encode(NONCE_PROGRAM_ADDRESS),
         addressEncoder.encode(nonceAccount),
         addressEncoder.encode(currentNonce),
+        addressEncoder.encode(transitionSigner),
         transitionCommitment,
     );
     return getBase58Decoder().decode(next) as Address;

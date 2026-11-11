@@ -1,6 +1,11 @@
 /** Funding keys, checking the programs are deployed, and waiting out a blockhash. */
 
 import {
+    ED25519_SIGNER_PROGRAM_ADDRESS,
+    MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
+    NONCE_PROGRAM_ADDRESS,
+} from '@solana-program/ed25519-programmatic-signer';
+import {
     airdropFactory,
     assertIsTransactionWithBlockhashLifetime,
     type Blockhash,
@@ -23,7 +28,6 @@ import {
     signTransactionMessageWithSigners,
 } from '@solana/kit';
 
-import { ED25519_SIGNER_PROGRAM_ADDRESS, MESSAGE_EXECUTOR_PROGRAM_ADDRESS, NONCE_PROGRAM_ADDRESS } from '../client';
 import type { Clients } from './rpc';
 
 /** The three programs the examples call, with the names their crates use. */

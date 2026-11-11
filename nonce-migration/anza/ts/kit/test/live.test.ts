@@ -5,6 +5,7 @@
  * a validator with the three programs loaded.
  */
 
+import { fetchNonce } from '@solana-program/ed25519-programmatic-signer';
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
     generateKeyPairSigner,
@@ -16,7 +17,6 @@ import {
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
-import { fetchNonce } from '../src/client';
 import { assertProgramsDeployed, fundedSigner, sendTransactions } from '../src/lib/cluster';
 import { type Clients, createClients } from '../src/lib/rpc';
 import {
