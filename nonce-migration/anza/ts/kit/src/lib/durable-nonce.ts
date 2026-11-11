@@ -7,14 +7,7 @@
  * transaction is sent as-is, whenever.
  */
 
-import {
-    fetchNonce as fetchSystemNonceAccount,
-    getCreateAccountInstruction,
-    getInitializeNonceAccountInstruction,
-    getNonceSize,
-    getTransferSolInstruction,
-    SYSTEM_PROGRAM_ADDRESS,
-} from '@solana-program/system';
+import { getNonceSize, getTransferSolInstruction, SYSTEM_PROGRAM_ADDRESS } from '@solana-program/system';
 import {
     type Address,
     appendTransactionMessageInstruction,
@@ -28,7 +21,6 @@ import {
     pipe,
     sendAndConfirmDurableNonceTransactionFactory,
     type SendableTransaction,
-    sequentialInstructionPlan,
     setTransactionMessageConfig,
     setTransactionMessageFeePayerSigner,
     setTransactionMessageLifetimeUsingDurableNonce,
@@ -39,36 +31,29 @@ import {
     type V1TransactionConfig,
 } from '@solana/kit';
 
-import { sendTransactions } from './cluster';
-import type { Clients } from './rpc';
+import type { Client } from './cluster';
 
-/** Creates a System nonce account whose authority is `cold`, paid for by `cold`. */
-export async function createDurableNonceAccount(clients: Clients, cold: KeyPairSigner): Promise<Address> {
+/** Creates a System nonce account owned and paid for by the client's payer, the cold key. */
+export async function createDurableNonceAccount(client: Client): Promise<Address> {
     const nonceAccount = await generateKeyPairSigner();
-    const rent = await clients.rpc.getMinimumBalanceForRentExemption(BigInt(getNonceSize())).send();
-    await sendTransactions(
-        clients,
-        cold,
-        sequentialInstructionPlan([
-            getCreateAccountInstruction({
-                lamports: rent,
-                newAccount: nonceAccount,
-                payer: cold,
-                programAddress: SYSTEM_PROGRAM_ADDRESS,
-                space: BigInt(getNonceSize()),
-            }),
-            getInitializeNonceAccountInstruction({
-                nonceAccount: nonceAccount.address,
-                nonceAuthority: cold.address,
-            }),
-        ]),
-    );
+    await client.sendTransaction([
+        client.system.instructions.createAccount({
+            lamports: await client.getMinimumBalance(getNonceSize()),
+            newAccount: nonceAccount,
+            programAddress: SYSTEM_PROGRAM_ADDRESS,
+            space: getNonceSize(),
+        }),
+        client.system.instructions.initializeNonceAccount({
+            nonceAccount: nonceAccount.address,
+            nonceAuthority: client.payer.address,
+        }),
+    ]);
     return nonceAccount.address;
 }
 
 /** Reads the value a System nonce account currently holds. */
-export async function fetchDurableNonce(rpc: Clients['rpc'], nonceAccount: Address): Promise<Nonce> {
-    const { data } = await fetchSystemNonceAccount(rpc, nonceAccount, { commitment: 'confirmed' });
+export async function fetchDurableNonce(client: Client, nonceAccount: Address): Promise<Nonce> {
+    const { data } = await client.system.accounts.nonce.fetch(nonceAccount);
     return data.blockhash as string as Nonce;
 }
 
@@ -120,9 +105,9 @@ export async function signDurableNonceTransfer(
 
 /** Sends a durable nonce transaction and waits for it to confirm. */
 export async function sendDurableNonceTransaction(
-    clients: Clients,
+    client: Client,
     transaction: DurableNonceTransaction,
 ): Promise<Signature> {
-    await sendAndConfirmDurableNonceTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
+    await sendAndConfirmDurableNonceTransactionFactory(client)(transaction, { commitment: 'confirmed' });
     return getSignatureFromTransaction(transaction);
 }

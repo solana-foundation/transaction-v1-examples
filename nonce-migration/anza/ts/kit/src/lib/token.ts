@@ -7,65 +7,32 @@
  * by promotion inside an execution message.
  */
 
-import {
-    fetchToken,
-    findAssociatedTokenPda,
-    getCreateMintInstructionPlan,
-    getMintToATAInstructionPlanAsync,
-    TOKEN_PROGRAM_ADDRESS,
-} from '@solana-program/token';
-import {
-    type Address,
-    createClientWithGetMinimumBalanceFromRpc,
-    generateKeyPairSigner,
-    type KeyPairSigner,
-} from '@solana/kit';
+import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
+import { type Address, generateKeyPairSigner } from '@solana/kit';
 
-import { sendTransactions } from './cluster';
-import type { Clients } from './rpc';
+import type { Client } from './cluster';
 
 /** Decimals of the mint the examples create: USDC's. */
 export const DECIMALS = 6;
 
-/** Creates a Token program mint with `payer` as its mint authority. */
-export async function createMint(clients: Clients, payer: KeyPairSigner): Promise<Address> {
+/** Creates a Token program mint with the client's payer as its mint authority. */
+export async function createMint(client: Client): Promise<Address> {
     const mint = await generateKeyPairSigner();
-    await sendTransactions(
-        clients,
-        payer,
-        await getCreateMintInstructionPlan(createClientWithGetMinimumBalanceFromRpc(clients.rpc), {
-            decimals: DECIMALS,
-            mintAuthority: payer.address,
-            newMint: mint,
-            payer,
-        }),
-    );
+    await client.token.instructions
+        .createMint({ decimals: DECIMALS, mintAuthority: client.payer.address, newMint: mint })
+        .sendTransactions();
     return mint.address;
 }
 
 /**
  * Mints `amount` to `owner`'s associated token account, creating it if it
- * does not exist, and returns that account. `payer` is the mint authority.
+ * does not exist, and returns that account. The client's payer is the mint
+ * authority.
  */
-export async function mintToAta(
-    clients: Clients,
-    payer: KeyPairSigner,
-    mint: Address,
-    owner: Address,
-    amount: bigint,
-): Promise<Address> {
-    await sendTransactions(
-        clients,
-        payer,
-        await getMintToATAInstructionPlanAsync({
-            amount,
-            decimals: DECIMALS,
-            mint,
-            mintAuthority: payer,
-            owner,
-            payer,
-        }),
-    );
+export async function mintToAta(client: Client, mint: Address, owner: Address, amount: bigint): Promise<Address> {
+    await client.token.instructions
+        .mintToATA({ amount, decimals: DECIMALS, mint, mintAuthority: client.payer, owner })
+        .sendTransactions();
     return await associatedTokenAddress(owner, mint);
 }
 
@@ -76,8 +43,8 @@ export async function associatedTokenAddress(owner: Address, mint: Address): Pro
 }
 
 /** The balance of a token account, in base units. */
-export async function fetchBalance(rpc: Clients['rpc'], account: Address): Promise<bigint> {
-    const { data } = await fetchToken(rpc, account, { commitment: 'confirmed' });
+export async function fetchBalance(client: Client, account: Address): Promise<bigint> {
+    const { data } = await client.token.accounts.token.fetch(account);
     return data.amount;
 }
 

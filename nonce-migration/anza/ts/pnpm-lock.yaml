@@ -47,6 +47,12 @@ importers:
       '@solana/kit':
         specifier: ^8.6.0
         version: 8.6.0(typescript@5.9.3)
+      '@solana/kit-plugin-rpc':
+        specifier: ^0.23.0
+        version: 0.23.0(@solana/kit@8.6.0(typescript@5.9.3))
+      '@solana/kit-plugin-signer':
+        specifier: ^0.23.0
+        version: 0.23.0(@solana/kit@8.6.0(typescript@5.9.3))
 
 packages:
 
@@ -759,6 +765,21 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  '@solana/kit-plugin-instruction-plan@0.23.0':
+    resolution: {integrity: sha512-TjL2oL0fWPrzwxwbaaRaog66jDlDokVQ1+ONR9EdYiVeLYl797WqtEU3YF5D1im2DXrbrUO3Lf3XOr7h6Ok4SQ==}
+    peerDependencies:
+      '@solana/kit': ^8.6.0
+
+  '@solana/kit-plugin-rpc@0.23.0':
+    resolution: {integrity: sha512-BsCpiD2sm8XJGyhqSBHFZgm6mNslomAf1572DFt9eRb+GMb0jN5rdWTiDvoFcPn95h+Pe2GLx+F4AWsTWxrkjA==}
+    peerDependencies:
+      '@solana/kit': ^8.6.0
+
+  '@solana/kit-plugin-signer@0.23.0':
+    resolution: {integrity: sha512-qLFDBYsbjWjwl4e569zSMkFRwWON9WH0sg5hVpCgrzu13uORLynYU9Vrt573a16y2Ic6Dcj4PKGmb7s7Ypm4Ig==}
+    peerDependencies:
+      '@solana/kit': ^8.6.0
 
   '@solana/kit@8.6.0':
     resolution: {integrity: sha512-UaigU+LiTzkU237FxfiJhxufvEfb1J02djJOnGpSz1GAjZtbZ8oc4EkQ1bS4sHewSRyR9RUk6yhBb5bLHG0w4w==}
@@ -1812,6 +1833,19 @@ snapshots:
       typescript: 5.9.3
     transitivePeerDependencies:
       - fastestsmallesttextencoderdecoder
+
+  '@solana/kit-plugin-instruction-plan@0.23.0(@solana/kit@8.6.0(typescript@5.9.3))':
+    dependencies:
+      '@solana/kit': 8.6.0(typescript@5.9.3)
+
+  '@solana/kit-plugin-rpc@0.23.0(@solana/kit@8.6.0(typescript@5.9.3))':
+    dependencies:
+      '@solana/kit': 8.6.0(typescript@5.9.3)
+      '@solana/kit-plugin-instruction-plan': 0.23.0(@solana/kit@8.6.0(typescript@5.9.3))
+
+  '@solana/kit-plugin-signer@0.23.0(@solana/kit@8.6.0(typescript@5.9.3))':
+    dependencies:
+      '@solana/kit': 8.6.0(typescript@5.9.3)
 
   '@solana/kit@8.6.0(typescript@5.9.3)':
     dependencies:

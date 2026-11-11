@@ -9,54 +9,44 @@
 
 import {
     findTransitionSignerPda,
-    getInitializeInstruction,
     getNonceEncoder,
     NONCE_PROGRAM_ADDRESS,
 } from '@solana-program/ed25519-programmatic-signer';
-import { getCreateAccountInstruction } from '@solana-program/system';
 import {
     type Address,
     generateKeyPairSigner,
     getAddressEncoder,
     getBase58Decoder,
     getUtf8Encoder,
-    type KeyPairSigner,
     type ReadonlyUint8Array,
-    sequentialInstructionPlan,
 } from '@solana/kit';
 
-import { sendTransactions } from './cluster';
-import type { Clients } from './rpc';
+import type { Client } from './cluster';
 
 /** The domain tag the Nonce program hashes into every successor value. */
 const NONCE_STEP_TAG = 'spl-nonce::step::v1';
 
 /**
- * Creates and initializes a nonce account for `authority`, paid for by `payer`.
- * The Anza JavaScript client has no helper for this yet; the Rust one does.
+ * Creates and initializes a nonce account for `authority`, paid for by the
+ * client's payer. The Anza JavaScript client has no helper for this yet; the
+ * Rust one does.
  *
  * Creation and initialization travel in one transaction so nothing can claim
  * the funded, uninitialized account in between. The authority does not sign;
  * it is only stored.
  */
-export async function createNonceAccount(clients: Clients, payer: KeyPairSigner, authority: Address): Promise<Address> {
+export async function createNonceAccount(client: Client, authority: Address): Promise<Address> {
     const nonceAccount = await generateKeyPairSigner();
-    const space = BigInt(getNonceEncoder().fixedSize);
-    const rent = await clients.rpc.getMinimumBalanceForRentExemption(space).send();
-    await sendTransactions(
-        clients,
-        payer,
-        sequentialInstructionPlan([
-            getCreateAccountInstruction({
-                lamports: rent,
-                newAccount: nonceAccount,
-                payer,
-                programAddress: NONCE_PROGRAM_ADDRESS,
-                space,
-            }),
-            getInitializeInstruction({ authority, nonceAccount: nonceAccount.address }),
-        ]),
-    );
+    const space = getNonceEncoder().fixedSize;
+    await client.sendTransaction([
+        client.system.instructions.createAccount({
+            lamports: await client.getMinimumBalance(space),
+            newAccount: nonceAccount,
+            programAddress: NONCE_PROGRAM_ADDRESS,
+            space,
+        }),
+        client.nonce.instructions.initialize({ authority, nonceAccount: nonceAccount.address }),
+    ]);
     return nonceAccount.address;
 }
 

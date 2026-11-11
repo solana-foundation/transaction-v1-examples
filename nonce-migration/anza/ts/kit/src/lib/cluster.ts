@@ -1,34 +1,50 @@
-/** Funding keys, checking the programs are deployed, and waiting out a blockhash. */
+/** Connecting with a funded key, checking the programs are deployed, and waiting out a blockhash. */
 
 import {
     ED25519_SIGNER_PROGRAM_ADDRESS,
+    ed25519SignerProgram,
     MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
     NONCE_PROGRAM_ADDRESS,
+    nonceProgram,
 } from '@solana-program/ed25519-programmatic-signer';
-import {
-    airdropFactory,
-    assertIsTransactionWithBlockhashLifetime,
-    type Blockhash,
-    createTransactionMessage,
-    createTransactionPlanExecutor,
-    createTransactionPlanner,
-    estimateAndSetResourceLimitsFactory,
-    estimateResourceLimitsFactory,
-    fetchEncodedAccount,
-    fillTransactionMessageProvisoryResourceLimits,
-    generateKeyPairSigner,
-    getSignatureFromTransaction,
-    type InstructionPlan,
-    type KeyPairSigner,
-    lamports,
-    pipe,
-    sendAndConfirmTransactionFactory,
-    setTransactionMessageFeePayerSigner,
-    setTransactionMessageLifetimeUsingBlockhash,
-    signTransactionMessageWithSigners,
-} from '@solana/kit';
+import { systemProgram } from '@solana-program/system';
+import { tokenProgram } from '@solana-program/token';
+import { type Blockhash, createClient, fetchEncodedAccount, lamports } from '@solana/kit';
+import { solanaLocalRpc } from '@solana/kit-plugin-rpc';
+import { airdropSigner, generatedSigner } from '@solana/kit-plugin-signer';
 
-import type { Clients } from './rpc';
+export const DEFAULT_RPC_URL = 'http://127.0.0.1:8899';
+export const DEFAULT_RPC_SUBSCRIPTIONS_URL = 'ws://127.0.0.1:8900';
+
+/**
+ * A `@solana/kit` plugin client for a freshly generated key funded by airdrop.
+ *
+ * `solanaLocalRpc` connects to the endpoints named by `PSIGNER_RPC_URL` and
+ * `PSIGNER_RPC_SUBSCRIPTIONS_URL` and installs transaction planning and
+ * sending: every transaction the client sends is v1, paid by `client.payer`,
+ * with resource limits measured by simulation. The program plugins hang typed
+ * instruction builders and account fetchers off the client, and each builder
+ * can send itself.
+ */
+export async function createFundedClient(amount: bigint) {
+    return (
+        await createClient()
+            .use(generatedSigner())
+            .use(
+                solanaLocalRpc({
+                    rpcSubscriptionsUrl: process.env.PSIGNER_RPC_SUBSCRIPTIONS_URL ?? DEFAULT_RPC_SUBSCRIPTIONS_URL,
+                    rpcUrl: process.env.PSIGNER_RPC_URL ?? DEFAULT_RPC_URL,
+                }),
+            )
+            .use(airdropSigner(lamports(amount)))
+    )
+        .use(systemProgram())
+        .use(tokenProgram())
+        .use(nonceProgram())
+        .use(ed25519SignerProgram());
+}
+
+export type Client = Awaited<ReturnType<typeof createFundedClient>>;
 
 /** The three programs the examples call, with the names their crates use. */
 export const PROGRAMS = [
@@ -43,7 +59,7 @@ export const PROGRAMS = [
  * Checked up front so a validator started without them names itself, rather
  * than surfacing later as a `ProgramAccountNotFound` on the relay.
  */
-export async function assertProgramsDeployed(rpc: Clients['rpc']): Promise<void> {
+export async function assertProgramsDeployed(rpc: Client['rpc']): Promise<void> {
     for (const [name, programAddress] of PROGRAMS) {
         const account = await fetchEncodedAccount(rpc, programAddress);
         if (!account.exists || !account.executable) {
@@ -54,17 +70,6 @@ export async function assertProgramsDeployed(rpc: Clients['rpc']): Promise<void>
     }
 }
 
-/** Creates a signer funded by airdrop, waiting for the airdrop to confirm. */
-export async function fundedSigner(clients: Clients, amount: bigint): Promise<KeyPairSigner> {
-    const signer = await generateKeyPairSigner();
-    await airdropFactory(clients)({
-        commitment: 'confirmed',
-        lamports: lamports(amount),
-        recipientAddress: signer.address,
-    });
-    return signer;
-}
-
 /**
  * Resolves once `blockhash` can no longer be used in a transaction.
  *
@@ -73,7 +78,7 @@ export async function fundedSigner(clients: Clients, amount: bigint): Promise<Ke
  * relaying, which is the shortest demonstration that the signed artifact does
  * not expire with it.
  */
-export async function waitForBlockhashExpiry(rpc: Clients['rpc'], blockhash: Blockhash): Promise<void> {
+export async function waitForBlockhashExpiry(rpc: Client['rpc'], blockhash: Blockhash): Promise<void> {
     for (;;) {
         const { value: valid } = await rpc.isBlockhashValid(blockhash, { commitment: 'confirmed' }).send();
         if (!valid) {
@@ -83,41 +88,6 @@ export async function waitForBlockhashExpiry(rpc: Clients['rpc'], blockhash: Blo
     }
 }
 
-/**
- * Sends `plan` as v1 transactions paid by `payer`, signed by every signer the
- * instructions name, and waits for each to confirm. For setup steps that are
- * not the point of an example.
- *
- * Unset v1 limits are zero, so the planner reserves room for them and the
- * executor fills in what a simulation measures, once the message has a
- * blockhash to simulate with.
- */
-export async function sendTransactions(clients: Clients, payer: KeyPairSigner, plan: InstructionPlan): Promise<void> {
-    const planner = createTransactionPlanner({
-        createTransactionMessage: () =>
-            pipe(
-                createTransactionMessage({ version: 1 }),
-                m => setTransactionMessageFeePayerSigner(payer, m),
-                fillTransactionMessageProvisoryResourceLimits,
-            ),
-    });
-    const estimateAndSetResourceLimits = estimateAndSetResourceLimitsFactory(
-        estimateResourceLimitsFactory({ rpc: clients.rpc }),
-    );
-    const executor = createTransactionPlanExecutor({
-        executeTransactionMessage: async (context, message) => {
-            const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
-            const transaction = await signTransactionMessageWithSigners(
-                await estimateAndSetResourceLimits(
-                    setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, message),
-                    { commitment: 'confirmed' },
-                ),
-            );
-            context.transaction = transaction;
-            assertIsTransactionWithBlockhashLifetime(transaction);
-            await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
-            return { signature: getSignatureFromTransaction(transaction), transaction };
-        },
-    });
-    await executor(await planner(plan));
-}
+/** Serializes a value that may contain bigints. */
+export const json = (value: unknown, indent?: number) =>
+    JSON.stringify(value, (_, entry) => (typeof entry === 'bigint' ? `${entry}` : entry), indent);

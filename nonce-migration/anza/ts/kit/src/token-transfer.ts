@@ -7,20 +7,15 @@
  * Run with `just ts-token-transfer`.
  */
 
-import { fetchNonce } from '@solana-program/ed25519-programmatic-signer';
-import { getTransferSolInstruction } from '@solana-program/system';
 import { getTransferToATAInstructionPlanAsync } from '@solana-program/token';
-import { createNoopSigner, generateKeyPairSigner, lamports, singleInstructionPlan } from '@solana/kit';
+import { createNoopSigner, generateKeyPairSigner, lamports } from '@solana/kit';
 
-import { assertProgramsDeployed, fundedSigner, sendTransactions } from './lib/cluster';
-import { createClients, json } from './lib/rpc';
+import { assertProgramsDeployed, createFundedClient, json } from './lib/cluster';
 import {
     artifact,
     authorizationMessage,
     executionMessage,
     programmaticSignerAddress,
-    relayTransaction,
-    sendRelay,
     signAuthorization,
 } from './lib/signer';
 import { createNonceAccount, nextNonce } from './lib/spl-nonce';
@@ -31,11 +26,8 @@ const SUPPLY = 1_000_000_000n;
 /** 250 tokens: what the withdrawal moves. */
 const AMOUNT = 250_000_000n;
 
-const clients = createClients();
-
-await assertProgramsDeployed(clients.rpc);
-
-const relayer = await fundedSigner(clients, 5_000_000_000n);
+const relayer = await createFundedClient(5_000_000_000n);
+await assertProgramsDeployed(relayer.rpc);
 const authority = await generateKeyPairSigner();
 const pda = await programmaticSignerAddress(authority.address);
 const recipient = (await generateKeyPairSigner()).address;
@@ -45,20 +37,16 @@ console.log(`  authority: ${authority.address} (cold)`);
 console.log(`  pda:       ${pda} (owns the token account)`);
 // The PDA pays the rent of the token account it creates for the recipient, so
 // it needs some SOL as well as tokens.
-await sendTransactions(
-    clients,
-    relayer,
-    singleInstructionPlan(
-        getTransferSolInstruction({ amount: lamports(100_000_000n), destination: pda, source: relayer }),
-    ),
-);
-const mint = await createMint(clients, relayer);
-const pdaAccount = await mintToAta(clients, relayer, mint, pda, SUPPLY);
+await relayer.system.instructions
+    .transferSol({ amount: lamports(100_000_000n), destination: pda, source: relayer.payer })
+    .sendTransaction();
+const mint = await createMint(relayer);
+const pdaAccount = await mintToAta(relayer, mint, pda, SUPPLY);
 console.log(`  mint:        ${mint}`);
-console.log(`  PDA account: ${pdaAccount} holds ${uiAmount(await fetchBalance(clients.rpc, pdaAccount))}`);
+console.log(`  PDA account: ${pdaAccount} holds ${uiAmount(await fetchBalance(relayer, pdaAccount))}`);
 console.log(`  recipient:   ${recipient} (no token account yet; the PDA creates it)`);
-const nonceAccount = await createNonceAccount(clients, relayer, pda);
-const { nonce } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data;
+const nonceAccount = await createNonceAccount(relayer, pda);
+const { nonce } = (await relayer.nonce.accounts.nonce.fetch(nonceAccount)).data;
 console.log(`  nonce account: ${nonceAccount}`);
 console.log(`  nonce:         ${nonce}`);
 
@@ -87,28 +75,30 @@ console.log(`  authorization message: ${authorization.length} bytes`);
 console.log(`  artifact:              ${json(signed, 2).replace(/\n/g, '\n                         ')}`);
 
 console.log('\n== relayed ==');
-const landed = await sendRelay(clients, await relayTransaction(clients, authorization, [signature], relayer));
-console.log(`  landed:        ${landed}`);
-const fetched = await clients.rpc
-    .getTransaction(landed, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+const { context: relay } = await relayer.ed25519Signer.instructions
+    .submit({ message: authorization, signatures: [signature] })
+    .sendTransaction();
+console.log(`  landed:        ${relay.signature}`);
+const fetched = await relayer.rpc
+    .getTransaction(relay.signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
     .send();
 console.log(`  compute units: ${fetched?.meta?.computeUnitsConsumed}`);
 
 console.log('\n== read back ==');
 const recipientAccount = await associatedTokenAddress(recipient, mint);
-const received = await fetchBalance(clients.rpc, recipientAccount);
+const received = await fetchBalance(relayer, recipientAccount);
 console.log(
     `  recipient account: ${recipientAccount} holds ${uiAmount(received)} (created by the PDA, which paid its rent)`,
 );
 if (received !== AMOUNT) {
     throw new Error(`expected the recipient to hold ${AMOUNT}`);
 }
-const left = await fetchBalance(clients.rpc, pdaAccount);
+const left = await fetchBalance(relayer, pdaAccount);
 console.log(`  PDA account:       holds ${uiAmount(left)}`);
 if (left !== SUPPLY - AMOUNT) {
     throw new Error(`expected the PDA to hold ${SUPPLY - AMOUNT}`);
 }
-const { nonce: advanced } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data;
+const { nonce: advanced } = (await relayer.nonce.accounts.nonce.fetch(nonceAccount)).data;
 console.log(`  nonce after:       ${advanced}`);
 console.log(`  predicted:         ${predicted}`);
 if (advanced !== predicted) {

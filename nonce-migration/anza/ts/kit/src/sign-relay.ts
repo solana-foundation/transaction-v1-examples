@@ -12,7 +12,7 @@
  * Run with `just ts-sign-relay`.
  */
 
-import { fetchNonce } from '@solana-program/ed25519-programmatic-signer';
+import { MESSAGE_EXECUTOR_ERROR__NONCE_MISMATCH } from '@solana-program/ed25519-programmatic-signer';
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
     createNoopSigner,
@@ -22,52 +22,48 @@ import {
     isSolanaError,
     lamports,
     singleInstructionPlan,
+    SOLANA_ERROR__FAILED_TO_SEND_TRANSACTION,
     SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
-    SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
+    unwrapSimulationError,
 } from '@solana/kit';
 
-import { assertProgramsDeployed, fundedSigner, sendTransactions, waitForBlockhashExpiry } from './lib/cluster';
+import { assertProgramsDeployed, createFundedClient, json, waitForBlockhashExpiry } from './lib/cluster';
 import {
     createDurableNonceAccount,
     fetchDurableNonce,
     sendDurableNonceTransaction,
     signDurableNonceTransfer,
 } from './lib/durable-nonce';
-import { createClients, json } from './lib/rpc';
 import {
     artifact,
     authorizationMessage,
     executionMessage,
     programmaticSignerAddress,
-    relayTransaction,
-    sendRelay,
     signAuthorization,
 } from './lib/signer';
 import { createNonceAccount, nextNonce } from './lib/spl-nonce';
 
 const AMOUNT = 10_000_000n;
 
-const clients = createClients();
-
-await assertProgramsDeployed(clients.rpc);
-
-const relayer = await fundedSigner(clients, 2_000_000_000n);
+const relayer = await createFundedClient(2_000_000_000n);
+await assertProgramsDeployed(relayer.rpc);
 const recipient = (await generateKeyPairSigner()).address;
 
 // The flow being replaced. The cold key holds the funds and pays the fee, so
 // it has to be funded, and it signs a whole transaction.
 console.log('== before: a System durable nonce transaction ==');
-const cold = await fundedSigner(clients, 1_000_000_000n);
-const durableNonceAccount = await createDurableNonceAccount(clients, cold);
-const durableNonce = await fetchDurableNonce(clients.rpc, durableNonceAccount);
+const coldClient = await createFundedClient(1_000_000_000n);
+const cold = coldClient.payer;
+const durableNonceAccount = await createDurableNonceAccount(coldClient);
+const durableNonce = await fetchDurableNonce(coldClient, durableNonceAccount);
 const durable = await signDurableNonceTransfer(cold, durableNonceAccount, durableNonce, recipient, AMOUNT);
 console.log(`  nonce account: ${durableNonceAccount}`);
 console.log(`  nonce:         ${durableNonce}`);
 console.log(`  signed by:     ${json(Object.keys(durable.signatures))} (the cold key, which also pays)`);
 console.log(`  size:          ${getTransactionSize(durable)} bytes`);
-console.log(`  landed:        ${await sendDurableNonceTransaction(clients, durable)}`);
+console.log(`  landed:        ${await sendDurableNonceTransaction(coldClient, durable)}`);
 console.log(
-    `  nonce after:   ${await fetchDurableNonce(clients.rpc, durableNonceAccount)} (a future blockhash; not knowable at signing time)`,
+    `  nonce after:   ${await fetchDurableNonce(coldClient, durableNonceAccount)} (a future blockhash; not knowable at signing time)`,
 );
 
 // The replacement. The cold key is never funded and never signs a transaction.
@@ -80,18 +76,14 @@ console.log(`  pda:       ${pda} (holds the funds; nothing to create)`);
 
 // Fund the PDA. It is a plain System-owned address, so this is an ordinary
 // transfer; in a migration it is where the cold key's SOL moves to.
-await sendTransactions(
-    clients,
-    relayer,
-    singleInstructionPlan(
-        getTransferSolInstruction({ amount: lamports(1_000_000_000n), destination: pda, source: relayer }),
-    ),
-);
+await relayer.system.instructions
+    .transferSol({ amount: lamports(1_000_000_000n), destination: pda, source: relayer.payer })
+    .sendTransaction();
 
 // One SPL nonce account per action in flight. The relayer pays the rent; the
 // PDA is the authority, so only an authorization can consume it.
-const nonceAccount = await createNonceAccount(clients, relayer, pda);
-const { nonce } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data;
+const nonceAccount = await createNonceAccount(relayer, pda);
+const { nonce } = (await relayer.nonce.accounts.nonce.fetch(nonceAccount)).data;
 console.log(`  nonce account: ${nonceAccount}`);
 console.log(`  nonce:         ${nonce}`);
 
@@ -120,39 +112,41 @@ console.log(`  artifact:              ${json(signed, 2).replace(/\n/g, '\n      
 
 // A transaction signed now would die with this blockhash. The artifact has no
 // blockhash, so it does not.
-const { value: blockhashAtSigning } = await clients.rpc.getLatestBlockhash().send();
+const { value: blockhashAtSigning } = await relayer.rpc.getLatestBlockhash().send();
 if (process.env.PSIGNER_SKIP_EXPIRY) {
     console.log(`\n== skipping the wait for blockhash ${blockhashAtSigning.blockhash} to expire ==`);
 } else {
     console.log(`\n== waiting for blockhash ${blockhashAtSigning.blockhash} to expire (about a minute) ==`);
-    await waitForBlockhashExpiry(clients.rpc, blockhashAtSigning.blockhash);
+    await waitForBlockhashExpiry(relayer.rpc, blockhashAtSigning.blockhash);
     console.log('  expired; a transaction signed alongside the artifact would now be dropped');
 }
 
 // The hot side. Any funded key can relay; it learns nothing it can change.
+// The client wraps the Submit instruction in a v1 transaction with a fresh
+// blockhash, measures its resource limits by simulation, signs, and sends.
 console.log('\n== relayed ==');
-const relay = await relayTransaction(clients, authorization, [signature], relayer);
-const relaySigners = Object.keys(relay.signatures);
+const submit = relayer.ed25519Signer.instructions.submit({ message: authorization, signatures: [signature] });
+const { context: relay } = await relayer.sendTransaction(submit);
+const relaySigners = Object.keys(relay.transaction.signatures);
 if (relaySigners.includes(authority.address)) {
     throw new Error('the authority must not sign the relay transaction');
 }
 console.log(
-    `  relay transaction: ${getTransactionSize(relay)} bytes, v1, signed by ${json(relaySigners)} (the relayer)`,
+    `  relay transaction: ${getTransactionSize(relay.transaction)} bytes, v1, signed by ${json(relaySigners)} (the relayer)`,
 );
-const relaySignature = await sendRelay(clients, relay);
-console.log(`  landed:            ${relaySignature}`);
-const fetched = await clients.rpc
-    .getTransaction(relaySignature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+console.log(`  landed:            ${relay.signature}`);
+const fetched = await relayer.rpc
+    .getTransaction(relay.signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
     .send();
 console.log(`  compute units:     ${fetched?.meta?.computeUnitsConsumed}`);
 
 console.log('\n== read back ==');
-const { value: balance } = await clients.rpc.getBalance(recipient, { commitment: 'confirmed' }).send();
+const { value: balance } = await relayer.rpc.getBalance(recipient, { commitment: 'confirmed' }).send();
 console.log(`  recipient balance: ${balance} lamports (both transfers)`);
 if (balance !== 2n * AMOUNT) {
     throw new Error(`expected the recipient to hold ${2n * AMOUNT} lamports`);
 }
-const { nonce: advanced } = (await fetchNonce(clients.rpc, nonceAccount, { commitment: 'confirmed' })).data;
+const { nonce: advanced } = (await relayer.nonce.accounts.nonce.fetch(nonceAccount)).data;
 console.log(`  nonce after:       ${advanced}`);
 console.log(`  predicted:         ${predicted}`);
 if (advanced !== predicted) {
@@ -160,21 +154,23 @@ if (advanced !== predicted) {
 }
 
 // The nonce value the artifact names is gone, so the executor refuses it.
-// Error 3 is the Executor's NonceMismatch, surfaced through the Signer.
+// The error is the Executor's `NonceMismatch`, surfaced through the Signer.
 console.log('\n== relayed again ==');
-const replay = await relayTransaction(clients, authorization, [signature], relayer);
 try {
-    await sendRelay(clients, replay);
+    await relayer.sendTransaction(submit);
     throw new Error('the replay unexpectedly landed');
 } catch (error) {
-    if (!isSolanaError(error, SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE)) {
+    if (!isSolanaError(error, SOLANA_ERROR__FAILED_TO_SEND_TRANSACTION)) {
         throw error;
     }
-    const cause = error.cause;
-    console.log(
-        `  rejected: ${error.message.split('\n')[0]} (${cause instanceof Error ? cause.message : String(cause)})`,
-    );
-    if (!isSolanaError(cause, SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM) || cause.context.code !== 3) {
-        throw new Error("expected the executor's NonceMismatch (custom program error 3)", { cause: error });
+    // The client simulates before sending, so the rejection arrives wrapped in
+    // a simulation error.
+    const cause = unwrapSimulationError(error.cause);
+    console.log(`  rejected: ${cause instanceof Error ? cause.message : String(cause)}`);
+    if (
+        !isSolanaError(cause, SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM) ||
+        cause.context.code !== MESSAGE_EXECUTOR_ERROR__NONCE_MISMATCH
+    ) {
+        throw new Error("expected the executor's NonceMismatch", { cause: error });
     }
 }

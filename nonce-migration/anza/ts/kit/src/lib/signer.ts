@@ -1,5 +1,6 @@
 /**
- * Building, signing, and relaying the three layers of a programmatic signer action.
+ * Building and signing the layers of a programmatic signer action. The relayer
+ * sends the outermost one with the client's `ed25519Signer` plugin.
  *
  * ```text
  * relay transaction        signed by the hot relayer, fresh blockhash, pays the fee
@@ -11,17 +12,12 @@
  * ```
  */
 
-import {
-    findProgrammaticSignerPda,
-    getExecuteInstruction,
-    getSubmitInstruction,
-} from '@solana-program/ed25519-programmatic-signer';
+import { findProgrammaticSignerPda, getExecuteInstruction } from '@solana-program/ed25519-programmatic-signer';
 import {
     AccountRole,
     type Address,
     appendTransactionMessageInstruction,
     appendTransactionMessageInstructionPlan,
-    assertIsTransactionWithBlockhashLifetime,
     type Blockhash,
     compileTransactionMessage,
     createNoopSigner,
@@ -29,29 +25,17 @@ import {
     getBase58Decoder,
     getBase64Decoder,
     getCompiledTransactionMessageEncoder,
-    getSignatureFromTransaction,
     type Instruction,
     type InstructionPlan,
     isWritableRole,
     type KeyPairSigner,
     pipe,
     type ReadonlyUint8Array,
-    sendAndConfirmTransactionFactory,
-    type SendableTransaction,
-    setTransactionMessageConfig,
     setTransactionMessageFeePayer,
-    setTransactionMessageFeePayerSigner,
     setTransactionMessageLifetimeUsingBlockhash,
-    type Signature,
     type SignatureBytes,
     signBytes,
-    signTransactionMessageWithSigners,
-    type Transaction,
-    type TransactionWithBlockhashLifetime,
-    type V1TransactionConfig,
 } from '@solana/kit';
-
-import type { Clients } from './rpc';
 
 /**
  * The address that acts for `authority`: a PDA of the Signer program.
@@ -64,19 +48,6 @@ export async function programmaticSignerAddress(authority: Address): Promise<Add
     const [address] = await findProgrammaticSignerPda({ authority });
     return address;
 }
-
-/**
- * The budget the relay transaction requests.
- *
- * Unset v1 limits are zero, not the legacy defaults, so the relayer has to
- * state them. The Signer and Executor programs plus one promoted PDA cost
- * about 55,000 compute units for a SOL transfer; the limit leaves room for a
- * larger action without being the 1.4 million maximum the Anza CLI requests.
- */
-export const RELAY_CONFIG: V1TransactionConfig = {
-    computeUnitLimit: 200_000,
-    loadedAccountsDataSizeLimit: 4 * 1024 * 1024,
-};
 
 /**
  * A lifetime slot holding `value` instead of a blockhash. The execution
@@ -187,41 +158,4 @@ export function artifact(
         nextNonce,
         signatures: signatures.map(([address, signature]) => `${address}=${getBase58Decoder().decode(signature)}`),
     };
-}
-
-/** A signed relay transaction, ready to send. */
-export type RelayTransaction = SendableTransaction & Transaction & TransactionWithBlockhashLifetime;
-
-/**
- * Builds and signs the relay transaction: a normal v1 transaction from
- * `relayer` holding one `Submit` instruction, signed by the relayer alone.
- *
- * The authorities' signatures travel inside the instruction data. The relayer
- * supplies the blockhash, pays the fee, and sets the compute budget; it cannot
- * change what the authorities approved.
- */
-export async function relayTransaction(
-    clients: Clients,
-    authorizationMessage: ReadonlyUint8Array,
-    signatures: SignatureBytes[],
-    relayer: KeyPairSigner,
-): Promise<RelayTransaction> {
-    const submit = getSubmitInstruction({ message: authorizationMessage, signatures });
-    const { value: latestBlockhash } = await clients.rpc.getLatestBlockhash().send();
-    const message = pipe(
-        createTransactionMessage({ version: 1 }),
-        m => setTransactionMessageFeePayerSigner(relayer, m),
-        m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-        m => appendTransactionMessageInstruction(submit, m),
-        m => setTransactionMessageConfig(RELAY_CONFIG, m),
-    );
-    const transaction = await signTransactionMessageWithSigners(message);
-    assertIsTransactionWithBlockhashLifetime(transaction);
-    return transaction;
-}
-
-/** Sends a relay transaction and waits for it to confirm. */
-export async function sendRelay(clients: Clients, transaction: RelayTransaction): Promise<Signature> {
-    await sendAndConfirmTransactionFactory(clients)(transaction, { commitment: 'confirmed' });
-    return getSignatureFromTransaction(transaction);
 }
