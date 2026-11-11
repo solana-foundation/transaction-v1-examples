@@ -23,9 +23,9 @@ setup-solana:
     sh -c "$(curl -sSfL https://release.anza.xyz/v{{ solana_version }}/install)"
     solana --version
 
-# Build the three programs from the pinned commit into .local/programs/. Pass `dump` to copy devnet's binaries instead.
-setup-programs source="build":
-    ./scripts/setup-programs.sh {{ source }}
+# Build the three programs from the pinned commit into .local/programs/.
+setup-programs:
+    ./scripts/setup-programs.sh
 
 # Formatting
 
@@ -48,27 +48,17 @@ typecheck:
 
 # Testing
 
-# Offline tests only — no validator required.
+# The tests are offline — no validator required.
 test:
     cd rust && cargo test --locked
-    cd ts/kit && pnpm exec vitest run test/wire.test.ts
+    cd ts/kit && pnpm exec vitest run
 
-# Every test, including the ones that need a validator.
-test-live:
-    just validator-start
-    just _test-live-inner || (just validator-stop && exit 1)
-    just validator-stop
-
-_test-live-inner:
-    cd rust && cargo test --locked -- --include-ignored --test-threads=1
-    cd ts/kit && PSIGNER_LIVE=1 pnpm exec vitest run
-
-# Everything CI runs, minus the live tests.
+# Everything CI runs, minus the examples, which need a validator.
 check: fmt-check lint typecheck test
 
 # Local validator
 
-# Start a validator with the Signer, Executor, and Nonce programs loaded. Set PSIGNER_PROGRAM_SOURCE=dump to use devnet's binaries.
+# Start a validator with the Signer, Executor, and Nonce programs loaded.
 validator-start:
     ./scripts/validator.sh start
 

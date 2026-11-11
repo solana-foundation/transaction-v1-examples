@@ -5,8 +5,7 @@
     "license": "MIT",
     "type": "module",
     "scripts": {
-        "test": "vitest run test/wire.test.ts",
-        "test:live": "vitest run"
+        "test": "vitest run"
     },
     "dependencies": {
         "@solana-program/ed25519-programmatic-signer": "^1.0.0",

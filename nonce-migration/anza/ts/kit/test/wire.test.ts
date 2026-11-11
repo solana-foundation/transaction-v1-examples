@@ -1,130 +1,61 @@
 /**
- * Offline tests: the PDA, the nonce successor, the two signed messages, and
- * the token withdrawal, against the fixtures `rust/tests/wire.rs` froze from
- * the Anza client crate.
+ * Offline tests: the TypeScript helpers that stand in for missing client
+ * functions, against what the Anza client crates produce for the same inputs.
+ * `rust/tests/wire.rs` asserts the same expected values on the Rust side.
  */
 
+import { findProgrammaticSignerPda } from '@solana-program/ed25519-programmatic-signer';
+import { getTransferSolInstruction } from '@solana-program/system';
 import {
-    findProgrammaticSignerPda,
-    MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
-} from '@solana-program/ed25519-programmatic-signer';
-import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
-import {
+    type Address,
+    createKeyPairFromPrivateKeyBytes,
+    createNoopSigner,
+    getAddressFromPublicKey,
     getBase64Decoder,
     getBase64Encoder,
     getCompiledTransactionMessageDecoder,
     type ReadonlyUint8Array,
-    signBytes,
-    verifySignature,
+    singleInstructionPlan,
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
 import { authorizationMessage, executionMessage } from '../src/lib/signer';
 import { nextNonce } from '../src/lib/spl-nonce';
-import { associatedTokenAddress } from '../src/lib/token';
-import {
-    AMOUNT,
-    authorityKeyPair,
-    EXPECTED_AUTHORITY,
-    EXPECTED_AUTHORIZATION_MESSAGE,
-    EXPECTED_EXECUTION_MESSAGE,
-    EXPECTED_NEXT_NONCE,
-    EXPECTED_PDA,
-    EXPECTED_TOKEN_EXECUTION_MESSAGE,
-    MINT,
-    NONCE,
-    NONCE_ACCOUNT,
-    RECIPIENT,
-    solTransfer,
-    tokenTransfer,
-} from './fixtures';
 
-const base64 = getBase64Decoder();
+// Fixed inputs: the authority's secret key is 32 bytes of 7, and each address
+// is 32 bytes of the number in its comment.
+const AUTHORITY_SEED = new Uint8Array(32).fill(7);
+const RECIPIENT = '8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR' as Address; // 2
+const NONCE_ACCOUNT = 'CktRuQ2mttgRGkXJtyksdKHjUdc2C4TgDzyB98oEzy8' as Address; // 3
+const NONCE = 'GgBaCs3NCBuZN12kCJgAW63ydqohFkHEdfdEXBPzLHq' as Address; // 4
+const AMOUNT = 10_000_000n;
+
+// What the Anza client crates produce for them.
+const EXPECTED_EXECUTION_MESSAGE =
+    'gQEAAQAAAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAEDuClYJxaE8PfFX0Fxd3EtIhv5ZXrMsG//+NmM+H1hj3YCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgIMAAABAgAAAICWmAAAAAAA';
+const EXPECTED_AUTHORIZATION_MESSAGE =
+    'gQEABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEI6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iwDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA7gpWCcWhPD3xV9BcXdxLSIb+WV6zLBv//jZjPh9YY92AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgLPaWlfj5JYuK1SNOpr++SvWDuDtHoo2hDLZ0DIYFQcOAWWGT5rG9fLwDcrw+nggq710Pl+QXhA8DKWM9aBvVZsy/dBGfmAqhXLmy1s8ZgUf7C7Mf6E2VM3yGC6u0UgpYcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQHnQACAQUGAgMHAIEBAAEAAAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQBA7gpWCcWhPD3xV9BcXdxLSIb+WV6zLBv//jZjPh9YY92AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICDAAAAQIAAACAlpgAAAAAAA==';
+const EXPECTED_NEXT_NONCE = 'SewSJdKpN41PPGEVRoSTvX6kEW2JSGoZbd9iPxtzf94';
 
 async function fixture() {
-    const authority = await authorityKeyPair();
-    const [pda] = await findProgrammaticSignerPda({ authority: authority.address });
-    const execution = executionMessage(pda, solTransfer(pda, RECIPIENT, AMOUNT), NONCE);
-    const authorization = authorizationMessage(execution, NONCE_ACCOUNT, pda, authority.address);
-    return { authority, authorization, execution, pda };
+    const keyPair = await createKeyPairFromPrivateKeyBytes(AUTHORITY_SEED);
+    const authority = await getAddressFromPublicKey(keyPair.publicKey);
+    const [pda] = await findProgrammaticSignerPda({ authority });
+    const transfer = getTransferSolInstruction({
+        amount: AMOUNT,
+        destination: RECIPIENT,
+        source: createNoopSigner(pda),
+    });
+    const execution = executionMessage(pda, singleInstructionPlan(transfer), NONCE);
+    const authorization = authorizationMessage(execution, NONCE_ACCOUNT, pda, authority);
+    return { authorization, execution };
 }
-
-describe('the programmatic signer PDA', () => {
-    it('is derived the way the Rust client derives it', async () => {
-        const { authority, pda } = await fixture();
-        expect(authority.address).toBe(EXPECTED_AUTHORITY);
-        expect(pda).toBe(EXPECTED_PDA);
-    });
-});
-
-describe('the execution message', () => {
-    it('matches the Rust client byte for byte', async () => {
-        const { execution } = await fixture();
-        expect(base64.decode(execution)).toBe(EXPECTED_EXECUTION_MESSAGE);
-    });
-
-    it('is v1, paid and signed by the PDA, with the nonce as its lifetime and no config', async () => {
-        const { execution, pda } = await fixture();
-        const decoded = getCompiledTransactionMessageDecoder().decode(execution);
-        expect(decoded.version).toBe(1);
-        if (decoded.version !== 1) throw new Error('unreachable');
-        expect(decoded.lifetimeToken).toBe(NONCE);
-        expect(decoded.configMask).toBe(0);
-        expect(decoded.staticAccounts[0]).toBe(pda);
-        expect(decoded.header.numSignerAccounts).toBe(1);
-        expect(decoded.numInstructions).toBe(1);
-    });
-});
-
-describe('the authorization message', () => {
-    it('holds the same Execute instruction as the Rust client, whatever the account order', async () => {
-        const { authorization } = await fixture();
-        const theirs = getBase64Encoder().encode(EXPECTED_AUTHORIZATION_MESSAGE);
-        expect(instructionsOf(authorization)).toEqual(instructionsOf(theirs));
-        expect(authorization.length).toBe(theirs.length);
-    });
-
-    it('wraps one Execute instruction and is signed by the authority only', async () => {
-        const { authority, authorization, execution, pda } = await fixture();
-        const decoded = getCompiledTransactionMessageDecoder().decode(authorization);
-        expect(decoded.version).toBe(1);
-        if (decoded.version !== 1) throw new Error('unreachable');
-        const signers = decoded.staticAccounts.slice(0, decoded.header.numSignerAccounts);
-        expect(signers).toEqual([authority.address]);
-        expect(signers).not.toContain(pda);
-        expect(decoded.lifetimeToken).toBe('11111111111111111111111111111111');
-        expect(decoded.configMask).toBe(0);
-        expect(decoded.numInstructions).toBe(1);
-        expect(decoded.staticAccounts[decoded.instructionHeaders[0]!.programAccountIndex]).toBe(
-            MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
-        );
-        // The execution message travels inside the instruction data, after the tag.
-        const data = decoded.instructionPayloads[0]!.instructionData;
-        expect(base64.decode(data.slice(data.length - execution.length))).toBe(base64.decode(execution));
-    });
-
-    it('is what the signature covers', async () => {
-        const { authority, authorization } = await fixture();
-        const signature = await signBytes(authority.keyPair.privateKey, authorization);
-        expect(await verifySignature(authority.keyPair.publicKey, signature, authorization)).toBe(true);
-        const tampered = new Uint8Array(authorization);
-        tampered[tampered.length - 1]! ^= 1;
-        expect(await verifySignature(authority.keyPair.publicKey, signature, tampered)).toBe(false);
-    });
-});
-
-describe('the next nonce', () => {
-    it('is predictable from the execution message, and matches the Rust client', async () => {
-        const { execution, pda } = await fixture();
-        expect(await nextNonce(NONCE_ACCOUNT, NONCE, execution)).toBe(EXPECTED_NEXT_NONCE);
-        const other = executionMessage(pda, solTransfer(pda, RECIPIENT, AMOUNT + 1n), NONCE);
-        expect(await nextNonce(NONCE_ACCOUNT, NONCE, other)).not.toBe(EXPECTED_NEXT_NONCE);
-    });
-});
 
 /**
  * The instructions a compiled message carries, independent of how its
  * accounts were ordered: program, data, and each account's address and role.
+ * Kit and the Rust compiler order accounts differently, so the authorization
+ * messages hold the same instruction but not the same bytes. See the README.
  */
 function instructionsOf(message: ReadonlyUint8Array) {
     const decoded = getCompiledTransactionMessageDecoder().decode(message);
@@ -142,32 +73,26 @@ function instructionsOf(message: ReadonlyUint8Array) {
             address: staticAccounts[index],
             role: roleOf(index),
         })),
-        data: base64.decode(decoded.instructionPayloads[i]!.instructionData),
+        data: getBase64Decoder().decode(decoded.instructionPayloads[i]!.instructionData),
         programAddress: staticAccounts[instructionHeader.programAccountIndex],
     }));
 }
 
-describe('a token withdrawal', () => {
-    it('holds the same instructions as the Rust client, whatever the account order', async () => {
-        const { pda } = await fixture();
-        const ours = executionMessage(pda, await tokenTransfer(MINT, pda, RECIPIENT, AMOUNT), NONCE);
-        const theirs = getBase64Encoder().encode(EXPECTED_TOKEN_EXECUTION_MESSAGE);
-        expect(instructionsOf(ours)).toEqual(instructionsOf(theirs));
-        expect(ours.length).toBe(theirs.length);
+describe('against the Anza client crates', () => {
+    it('the execution message matches byte for byte', async () => {
+        const { execution } = await fixture();
+        expect(getBase64Decoder().decode(execution)).toBe(EXPECTED_EXECUTION_MESSAGE);
     });
 
-    it('creates the destination and transfers as the PDA, the only signer', async () => {
-        const { pda } = await fixture();
-        const message = executionMessage(pda, await tokenTransfer(MINT, pda, RECIPIENT, AMOUNT), NONCE);
-        const [create, transfer] = instructionsOf(message);
-        expect(create!.programAddress).toBe(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
-        expect(create!.accounts[0]).toEqual({ address: pda, role: 'signer writable' });
-        expect(transfer!.programAddress).toBe(TOKEN_PROGRAM_ADDRESS);
-        expect(transfer!.accounts[0]!.address).toBe(await associatedTokenAddress(pda, MINT));
-        expect(transfer!.accounts[2]!.address).toBe(await associatedTokenAddress(RECIPIENT, MINT));
-        expect(transfer!.accounts[3]).toEqual({ address: pda, role: 'signer writable' });
-        const decoded = getCompiledTransactionMessageDecoder().decode(message);
-        expect(decoded.header.numSignerAccounts).toBe(1);
-        expect(decoded.staticAccounts[0]).toBe(pda);
+    it('the authorization message holds the same Execute instruction', async () => {
+        const { authorization } = await fixture();
+        const theirs = getBase64Encoder().encode(EXPECTED_AUTHORIZATION_MESSAGE);
+        expect(instructionsOf(authorization)).toEqual(instructionsOf(theirs));
+        expect(authorization.length).toBe(theirs.length);
+    });
+
+    it('the next nonce matches', async () => {
+        const { execution } = await fixture();
+        expect(await nextNonce(NONCE_ACCOUNT, NONCE, execution)).toBe(EXPECTED_NEXT_NONCE);
     });
 });

@@ -65,7 +65,7 @@ jobs:
       - run: just test
 
   live:
-    name: Live tests against a validator with the programs loaded
+    name: Examples against a validator with the programs loaded
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -110,8 +110,10 @@ jobs:
       - name: Build the programs
         run: just setup-programs
 
-      - name: Run the live tests
-        run: just test-live
+      # Every example checks its own result and exits non-zero if the relay did
+      # not land, the nonce did not advance as predicted, or a replay landed.
+      - name: Run the examples
+        run: just demo
 
       - name: Upload the validator log
         if: failure()

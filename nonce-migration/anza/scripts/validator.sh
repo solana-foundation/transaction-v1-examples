@@ -38,7 +38,7 @@ check_program() {
 }
 
 start() {
-    "$ROOT/scripts/setup-programs.sh" "${PSIGNER_PROGRAM_SOURCE:-build}"
+    "$ROOT/scripts/setup-programs.sh"
 
     # Without this guard a second --reset validator would delete the ledger the
     # running one has open, while the readiness check below still passed because

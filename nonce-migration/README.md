@@ -68,7 +68,7 @@ just sign-relay       # …then any example below
 just validator-stop
 ```
 
-The `Justfile` in this directory delegates `check`, `test`, `test-live`, and `demo` to every backend.
+The `Justfile` in this directory delegates `check`, `test`, and `demo` to every backend.
 
 ## Examples
 
@@ -104,10 +104,10 @@ Python and Go have no client on either side and are recorded as a gap, the way `
 
 ```
 anza/        Anza programmatic signer: Rust and TypeScript examples, tests, scripts, its own README and Justfile
-Justfile     delegates check, test, test-live, and demo to every backend
+Justfile     delegates check, test, and demo to every backend
 ```
 
-Each backend is laid out like `transaction-v1/`: `rust/src/bin/` and `ts/kit/src/` hold one entry point per example, `rust/src/` and `ts/kit/src/lib/` the modules they share with matching names, `rust/tests/` and `ts/kit/test/` offline and live tests, and `scripts/` the validator and program setup.
+Each backend is laid out like `transaction-v1/`: `rust/src/bin/` and `ts/kit/src/` hold one entry point per example, `rust/src/` and `ts/kit/src/lib/` the modules they share with matching names, `rust/tests/` and `ts/kit/test/` offline tests, and `scripts/` the validator and program setup.
 
 ## Additional resources
 

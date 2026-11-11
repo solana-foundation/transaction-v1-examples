@@ -30,7 +30,7 @@ just sign-relay       # …then any example below
 just validator-stop
 ```
 
-The TypeScript examples use the released [`@solana-program/ed25519-programmatic-signer`](https://www.npmjs.com/package/@solana-program/ed25519-programmatic-signer) client. The programs and the Rust client crates have no release yet, so they are pinned to the commit that client was built from, the [`clients-js@v1.0.0`](https://github.com/solana-program/ed25519-programmatic-signer/tree/clients-js%40v1.0.0) tag, named once in the `Justfile`. `just setup-programs` builds the programs from it with `cargo build-sbf`; pass `dump` to copy the binaries deployed on devnet instead, which Anza redeploys from main.
+The TypeScript examples use the released [`@solana-program/ed25519-programmatic-signer`](https://www.npmjs.com/package/@solana-program/ed25519-programmatic-signer) client. The programs and the Rust client crates have no release yet, so they are pinned to the commit that client was built from, the [`clients-js@v1.0.0`](https://github.com/solana-program/ed25519-programmatic-signer/tree/clients-js%40v1.0.0) tag, named once in the `Justfile`. `just setup-programs` builds the programs from it with `cargo build-sbf`.
 
 ## Examples
 
@@ -82,7 +82,7 @@ The next nonce is known before anything is sent because an SPL nonce advances to
 
 ## Common gotchas
 
-**Two different errors are both `custom program error: 0x3`.** The Executor's `NonceMismatch` and the Signer's `InvalidSignature` share the number. A replayed authorization fails with the first, an edited one with the second. Read which program failed in the log to tell them apart; the live tests check both.
+**Two different errors are both `custom program error: 0x3`.** The Executor's `NonceMismatch` and the Signer's `InvalidSignature` share the number. A replayed authorization fails with the first, an edited one with the second. Read which program failed in the log to tell them apart.
 
 **The execution message must carry no transaction config.** The Executor rejects one that sets a compute unit limit or a priority fee, since those only mean something on a top-level transaction. Set the budget on the relay transaction instead. The Anza CLI strips a config it is handed; these examples never set one.
 
@@ -119,32 +119,30 @@ Every example reads its settings from the environment.
 
 | Variable | Default | Used by |
 |---|---|---|
-| `PSIGNER_RPC_URL` | `http://127.0.0.1:8899` | all examples and tests |
-| `PSIGNER_RPC_SUBSCRIPTIONS_URL` | `ws://127.0.0.1:8900` | TypeScript examples and tests |
+| `PSIGNER_RPC_URL` | `http://127.0.0.1:8899` | all examples |
+| `PSIGNER_RPC_SUBSCRIPTIONS_URL` | `ws://127.0.0.1:8900` | TypeScript examples |
 | `PSIGNER_SKIP_EXPIRY` | unset | set to any value to relay without waiting for the signing-time blockhash to expire |
-| `PSIGNER_LIVE` | unset | set to `1` to un-skip the TypeScript live tests |
-| `PSIGNER_PROGRAM_SOURCE` | `build` | set to `dump` to have `just validator-start` copy devnet's binaries instead of building |
 | `PSIGNER_COMMIT` | set by `just` | the pinned commit the scripts clone |
 
 ## Testing
 
 ```sh
-just test       # offline: execution message, authorization message, nonce prediction, token withdrawal
-just test-live  # everything, against a validator started for the run
-just check      # what CI runs on every PR, minus the live tests
+just test   # offline: the execution message, the authorization message, and the next nonce
+just demo   # every example against a fresh validator; each checks its own result
+just check  # format, lint, typecheck, and the offline tests
 ```
 
-The offline tests in both languages share one set of fixtures, frozen from the Anza client crate by [`rust/tests/wire.rs`](rust/tests/wire.rs), so the TypeScript messages are checked against the Rust client crate's, instruction for instruction. Live tests relay a cold-signed transfer, assert the nonce advanced to the predicted value, and assert that a replay and an edited message are both rejected; and relay a cold-signed token withdrawal, asserting the recipient's account was created and filled and the nonce advanced as predicted.
+The offline tests check the three TypeScript helpers that stand in for missing client functions against what the Anza client crates produce for the same inputs; [`rust/tests/wire.rs`](rust/tests/wire.rs) and [`ts/kit/test/wire.test.ts`](ts/kit/test/wire.test.ts) assert the same expected values. The examples are the live tests: each exits non-zero unless the relay landed, the funds arrived, the nonce advanced to the value predicted at signing time, and, in `sign-relay`, a replay was rejected. CI runs `just check` and `just demo`.
 
 ## Layout
 
 ```
 rust/src/bin/         Rust example binaries, one per example
 rust/src/             the Rust library they share
-rust/tests/           offline and live tests
+rust/tests/           offline tests
 ts/kit/src/           @solana/kit example scripts, one per example
 ts/kit/src/lib/       the modules they share
-ts/kit/test/          offline and live tests
+ts/kit/test/          offline tests
 scripts/              validator and program build
 ```
 
