@@ -53,7 +53,7 @@ The five operations in the directory README are mostly calls into the official c
 | Predict the next nonce | `spl_nonce::next_nonce` | `nextNonce` in `spl-nonce.ts` |
 | Relay on the hot side | send the `Submit` instruction | `client.ed25519Signer.instructions.submit(...)` |
 
-`sign-relay` sends the same transfer twice: first as a durable nonce transaction, then through the programmatic signer, printing each layer as it goes. Between signing and relaying it waits for a blockhash captured at signing time to expire, about a minute on a local validator, which is the shortest proof that the signed authorization outlives one. Set `PSIGNER_SKIP_EXPIRY=true` to skip the wait.
+`sign-relay` sends the same transfer twice: first as a durable nonce transaction, then through the programmatic signer, printing what it builds as it goes. Between signing and relaying it waits for a blockhash captured at signing time to expire, about a minute on a local validator, which is the shortest proof that the signed authorization outlives one. Set `PSIGNER_SKIP_EXPIRY=true` to skip the wait.
 
 `token-transfer` is the withdrawal most nonce users run: tokens, not SOL. The PDA holds 1,000 of a Token program mint, the kind USDC is. The cold key signs one action that creates the recipient's token account, with the PDA paying the rent, and moves 250 into it; the hot key relays it. It costs about 90,000 compute units against roughly 54,000 for a SOL transfer, most of it the account creation. It does not wait for a blockhash to expire; `sign-relay` already shows that.
 
@@ -70,7 +70,7 @@ relay transaction          signed by the hot relayer, fresh blockhash, pays the 
 
 The cold key signs the authorization message's bytes, which is signing a Solana message, so hardware wallets and custody systems can at least ingest it. Inside, the authorization message has exactly one instruction, `Execute`, whose data is the execution message. Inside that, the execution message names the PDA as fee payer and signer, which it could never be in a real transaction: the Signer program promotes the PDA to a signer by CPI once the authority's signature verifies, and the Executor runs the action's instructions with that promoted signer.
 
-Every account key appears once per layer, which is where most of the 979 bytes go. [`rust/src/signer.rs`](rust/src/signer.rs) and [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) build each layer in turn.
+Every account key appears once per layer, which is where most of the 979 bytes go. [`ts/kit/src/lib/signer.ts`](ts/kit/src/lib/signer.ts) builds the two inner messages; in Rust, [`rust/src/signer.rs`](rust/src/signer.rs) builds the execution message and the client crates build the rest.
 
 ## What crosses the air gap
 
@@ -78,7 +78,7 @@ The cold side needs the nonce value and nothing else from the network. What it h
 
 The relayer cannot change the amount, the recipient, or the nonce without invalidating the signature. It can choose when to relay, with which blockhash, from which fee payer, and with what compute budget.
 
-`next_nonce` is known before anything is sent because an SPL nonce advances to `sha256(tag, program, account, current, sha256(execution message))`. That is what lets a chain of actions be signed up front, each valid only after the one before, and it is what the examples check after relaying.
+The next nonce is known before anything is sent because an SPL nonce advances to `sha256(tag, program, account, current, transition signer, sha256(execution message))`, where the transition signer is a fixed PDA of the Executor program. That is what lets a chain of actions be signed up front, each valid only after the one before, and it is what the examples check after relaying.
 
 ## Common gotchas
 
@@ -90,7 +90,7 @@ The relayer cannot change the amount, the recipient, or the nonce without invali
 
 **The PDA cannot pay.** It is the fee payer of the execution message only as a placeholder. A real fee payer, funded and online, has to sign the relay transaction. In the Anza CLI's terms that is the configured keypair; here it is a freshly airdropped key.
 
-**Kit and Rust compile the same instructions into different bytes.** Both order a compiled message's accounts by privilege, but within a class `@solana/kit` sorts addresses as strings, with an English collator, and the Rust compiler sorts them as bytes. With one account per class, as in a SOL transfer's execution message, the two agree; the authorization message and a token transfer have several per class and they do not. Both messages are valid and the Executor runs either, but the signature, the artifact, and the next nonce all differ, so a chain signed in one language has to be checked by decoding its instructions, not by recompiling them. The TypeScript wire tests compare decoded instructions, not bytes, for this reason.
+**Kit and Rust compile the same instructions into different bytes.** Both order a compiled message's accounts by privilege, but within a class `@solana/kit` sorts addresses as strings, with an English collator, and the Rust compiler sorts them as bytes. With one account per class, as in a SOL transfer's execution message, the two agree; the authorization message and a token transfer have several per class and they do not. Both messages are valid and the Executor runs either, but the signature and the next nonce differ, so a chain signed in one language has to be checked by decoding its instructions, not by recompiling them. The TypeScript wire tests compare decoded instructions, not bytes, for this reason.
 
 **The PDA pays rent, so keep it in SOL.** It is a System-owned address with lamports, so an execution message can carry `CreateAssociatedTokenAccountIdempotent` with the PDA as payer, which is how `token-transfer` creates the recipient's account. A PDA that holds only tokens cannot do that. The Signer and the Executor use the first two CPI levels, the target program gets two more; the Associated Token program's own call into System uses one of them.
 

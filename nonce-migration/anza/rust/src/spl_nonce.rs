@@ -55,7 +55,8 @@ pub fn fetch_nonce(client: &RpcClient, nonce_account: &Address) -> Result<Nonce>
 /// The value `nonce_account` will hold after `execution_message` runs.
 ///
 /// A System nonce advances to an unpredictable future blockhash. An SPL nonce
-/// advances to a hash of its current value and the message that ran, so the
+/// advances to a hash of its current value, the Executor's transition signer,
+/// and the message that ran, so the
 /// signer knows the successor before anything is sent. That is what lets a
 /// chain of actions be signed up front, each valid only after the one before.
 pub fn next_nonce(nonce_account: &Address, execution_message: &v1::Message) -> Hash {
