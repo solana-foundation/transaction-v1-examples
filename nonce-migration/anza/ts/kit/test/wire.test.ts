@@ -4,7 +4,10 @@
  * the Anza client crate.
  */
 
-import { MESSAGE_EXECUTOR_PROGRAM_ADDRESS } from '@solana-program/ed25519-programmatic-signer';
+import {
+    findProgrammaticSignerPda,
+    MESSAGE_EXECUTOR_PROGRAM_ADDRESS,
+} from '@solana-program/ed25519-programmatic-signer';
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
 import {
     getBase64Decoder,
@@ -16,7 +19,7 @@ import {
 } from '@solana/kit';
 import { describe, expect, it } from 'vitest';
 
-import { authorizationMessage, executionMessage, programmaticSignerAddress } from '../src/lib/signer';
+import { authorizationMessage, executionMessage } from '../src/lib/signer';
 import { nextNonce } from '../src/lib/spl-nonce';
 import { associatedTokenAddress } from '../src/lib/token';
 import {
@@ -40,7 +43,7 @@ const base64 = getBase64Decoder();
 
 async function fixture() {
     const authority = await authorityKeyPair();
-    const pda = await programmaticSignerAddress(authority.address);
+    const [pda] = await findProgrammaticSignerPda({ authority: authority.address });
     const execution = executionMessage(pda, solTransfer(pda, RECIPIENT, AMOUNT), NONCE);
     const authorization = authorizationMessage(execution, NONCE_ACCOUNT, pda, authority.address);
     return { authority, authorization, execution, pda };

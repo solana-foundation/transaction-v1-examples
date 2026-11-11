@@ -10,10 +10,7 @@ use clap::Parser;
 use psigner::cluster::{
     assert_programs_deployed, client, compute_units, funded_keypair, send_transaction,
 };
-use psigner::signer::{
-    authorization_message, execution_message, programmatic_signer_address, relay_transaction,
-    sign_authorization, Artifact,
-};
+use psigner::signer::execution_message;
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::token::{create_mint, fetch_balance, mint_to_ata, transfer_to_ata, ui_amount};
 use psigner::DEFAULT_RPC_URL;
@@ -21,6 +18,9 @@ use solana_keypair::Keypair;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
 use spl_associated_token_account_interface::address::get_associated_token_address;
+use spl_ed25519_signer_client::signing::sign_and_submit;
+use spl_ed25519_signer_client::ProgrammaticSigner;
+use spl_message_executor_client::instruction::execute;
 
 /// 1,000 tokens at six decimals: what the PDA holds.
 const SUPPLY: u64 = 1_000_000_000;
@@ -41,7 +41,8 @@ fn main() -> Result<()> {
 
     let relayer = funded_keypair(&client, 5_000_000_000)?;
     let authority = Keypair::new();
-    let pda = programmatic_signer_address(&authority.pubkey());
+    let pda =
+        ProgrammaticSigner::derive_address(&spl_ed25519_signer_client::ID, &authority.pubkey());
     let recipient = Keypair::new().pubkey();
 
     println!("== setup: the PDA holds 1,000 tokens ==");
@@ -73,45 +74,24 @@ fn main() -> Result<()> {
     println!("  nonce:         {nonce}");
 
     // The cold side: two ordinary token instructions with the PDA as payer and
-    // owner, compiled into an execution message, wrapped in an authorization
-    // message, and signed. Nothing here needs an RPC.
+    // owner, compiled into an execution message, wrapped in an Execute
+    // instruction, and signed. Nothing here needs an RPC.
     println!("\n== signed on the cold side ==");
     let execution = execution_message(
         &pda,
         &transfer_to_ata(&mint, &pda, &recipient, AMOUNT)?,
         nonce,
     )?;
-    let authorization =
-        authorization_message(&execution, &nonce_account, &pda, &[authority.pubkey()])?;
-    let signature = sign_authorization(&authorization, &authority);
+    let submit = sign_and_submit(&execute(&nonce_account, &pda, &execution), &[&authority])?;
     let predicted = next_nonce(&nonce_account, &execution);
-    let artifact = Artifact::new(
-        &authorization,
-        &[(authority.pubkey(), signature)],
-        nonce,
-        predicted,
-    );
     println!(
-        "  execution message:     {} bytes, 2 instructions (CreateAssociatedTokenAccountIdempotent, TransferChecked)",
+        "  execution message:  {} bytes, 2 instructions (CreateAssociatedTokenAccountIdempotent, TransferChecked)",
         execution.serialize().len()
     );
-    println!(
-        "  authorization message: {} bytes",
-        authorization.serialize().len()
-    );
-    println!(
-        "  artifact:              {}",
-        serde_json::to_string_pretty(&artifact)?.replace('\n', "\n                         ")
-    );
+    println!("  Submit instruction: {} bytes of data", submit.data.len());
 
     println!("\n== relayed ==");
-    let relay = relay_transaction(
-        &authorization,
-        vec![signature],
-        &relayer,
-        client.get_latest_blockhash()?,
-    )?;
-    let landed = client.send_and_confirm_transaction(&relay)?;
+    let landed = send_transaction(&client, &relayer, &[submit], &[&relayer])?;
     println!("  landed:        {landed}");
     if let Some(units) = compute_units(&client, &landed)? {
         println!("  compute units: {units}");

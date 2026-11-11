@@ -19,10 +19,7 @@ use psigner::cluster::{
 use psigner::durable_nonce::{
     create_durable_nonce_account, fetch_durable_nonce, sign_durable_nonce_transfer,
 };
-use psigner::signer::{
-    authorization_message, execution_message, programmatic_signer_address, relay_transaction,
-    sign_authorization, Artifact,
-};
+use psigner::signer::execution_message;
 use psigner::spl_nonce::{create_nonce_account, fetch_nonce, next_nonce};
 use psigner::DEFAULT_RPC_URL;
 use solana_commitment_config::CommitmentConfig;
@@ -31,6 +28,9 @@ use solana_message::VersionedMessage;
 use solana_signer::Signer;
 use solana_system_interface::instruction as system_instruction;
 use solana_transaction::versioned::VersionedTransaction;
+use spl_ed25519_signer_client::signing::sign_and_submit;
+use spl_ed25519_signer_client::ProgrammaticSigner;
+use spl_message_executor_client::instruction::execute;
 
 const AMOUNT: u64 = 10_000_000;
 
@@ -81,7 +81,8 @@ fn main() -> Result<()> {
     // transaction. A PDA derived from it holds the funds instead.
     println!("\n== after: a programmatic signer authorization ==");
     let authority = Keypair::new();
-    let pda = programmatic_signer_address(&authority.pubkey());
+    let pda =
+        ProgrammaticSigner::derive_address(&spl_ed25519_signer_client::ID, &authority.pubkey());
     println!(
         "  authority: {} (cold; holds nothing, signs one message)",
         authority.pubkey()
@@ -108,40 +109,26 @@ fn main() -> Result<()> {
     println!("  nonce account: {nonce_account}");
     println!("  nonce:         {nonce}");
 
-    // The cold side. Nothing below needs an RPC: the execution message, the
-    // authorization message, and the signature can all be produced air-gapped
-    // once the nonce value is known.
+    // The cold side. Nothing below needs an RPC once the nonce value is known:
+    // the action is compiled into an execution message, wrapped in an Execute
+    // instruction, and `sign_and_submit` builds the authorization message,
+    // signs it with the cold key, and returns the Submit instruction to relay.
     println!("\n== signed on the cold side ==");
     let transfer = system_instruction::transfer(&pda, &recipient, AMOUNT);
     let execution = execution_message(&pda, &[transfer], nonce)?;
-    let authorization =
-        authorization_message(&execution, &nonce_account, &pda, &[authority.pubkey()])?;
-    let signature = sign_authorization(&authorization, &authority);
+    let execute = execute(&nonce_account, &pda, &execution);
+    let submit = [sign_and_submit(&execute, &[&authority])?];
     let predicted = next_nonce(&nonce_account, &execution);
-    let artifact = Artifact::new(
-        &authorization,
-        &[(authority.pubkey(), signature)],
-        nonce,
-        predicted,
-    );
     println!(
-        "  execution message:     {} bytes, {} instruction (the transfer)",
+        "  execution message:  {} bytes, {} instruction (the transfer)",
         execution.serialize().len(),
         execution.instructions.len()
     );
     println!(
-        "  authorization message: {} bytes, {} instruction (Execute, wrapping it)",
-        authorization.serialize().len(),
-        authorization.instructions.len()
+        "  Submit instruction: {} bytes of data, holding the authorization message and the signature",
+        submit[0].data.len()
     );
-    println!(
-        "  signers:               {:?}",
-        &authorization.account_keys[..usize::from(authorization.header.num_required_signatures)]
-    );
-    println!(
-        "  artifact:              {}",
-        serde_json::to_string_pretty(&artifact)?.replace('\n', "\n                         ")
-    );
+    println!("  next nonce:         {predicted} (known before anything is sent)");
 
     // A transaction signed now would die with this blockhash. The artifact has
     // no blockhash, so it does not.
@@ -159,21 +146,7 @@ fn main() -> Result<()> {
 
     // The hot side. Any funded key can relay; it learns nothing it can change.
     println!("\n== relayed ==");
-    let relay = relay_transaction(
-        &authorization,
-        vec![signature],
-        &relayer,
-        client.get_latest_blockhash()?,
-    )?;
-    let relay_signers = &relay.message.static_account_keys()[..relay.signatures.len()];
-    if relay_signers.contains(&authority.pubkey()) {
-        bail!("the authority must not sign the relay transaction");
-    }
-    println!(
-        "  relay transaction: {} bytes, v1, signed by {relay_signers:?} (the relayer)",
-        versioned_size(&relay)
-    );
-    let relay_signature = client.send_and_confirm_transaction(&relay)?;
+    let relay_signature = send_transaction(&client, &relayer, &submit, &[&relayer])?;
     println!("  landed:            {relay_signature}");
     if let Some(units) = compute_units(&client, &relay_signature)? {
         println!("  compute units:     {units}");
@@ -195,13 +168,7 @@ fn main() -> Result<()> {
     // The nonce value the artifact names is gone, so the executor refuses it.
     // Error 3 is the Executor's NonceMismatch, surfaced through the Signer.
     println!("\n== relayed again ==");
-    let replay = relay_transaction(
-        &authorization,
-        vec![signature],
-        &relayer,
-        client.get_latest_blockhash()?,
-    )?;
-    match client.send_and_confirm_transaction(&replay) {
+    match send_transaction(&client, &relayer, &submit, &[&relayer]) {
         Ok(signature) => bail!("the replay unexpectedly landed as {signature}"),
         Err(error) => {
             let text = error.to_string();

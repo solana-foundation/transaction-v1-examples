@@ -1588,8 +1588,6 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "clap",
- "serde",
- "serde_json",
  "solana-address 2.6.1",
  "solana-commitment-config",
  "solana-hash",

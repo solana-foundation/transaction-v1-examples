@@ -1,6 +1,7 @@
 /**
- * Building and signing the layers of a programmatic signer action. The relayer
- * sends the outermost one with the client's `ed25519Signer` plugin.
+ * Building the two inner messages of a programmatic signer action. The cold
+ * key signs the authorization message's bytes with `signBytes`, and the relayer
+ * sends the outermost layer with the client's `ed25519Signer` plugin.
  *
  * ```text
  * relay transaction        signed by the hot relayer, fresh blockhash, pays the fee
@@ -12,7 +13,7 @@
  * ```
  */
 
-import { findProgrammaticSignerPda, getExecuteInstruction } from '@solana-program/ed25519-programmatic-signer';
+import { getExecuteInstruction } from '@solana-program/ed25519-programmatic-signer';
 import {
     AccountRole,
     type Address,
@@ -22,32 +23,15 @@ import {
     compileTransactionMessage,
     createNoopSigner,
     createTransactionMessage,
-    getBase58Decoder,
-    getBase64Decoder,
     getCompiledTransactionMessageEncoder,
     type Instruction,
     type InstructionPlan,
     isWritableRole,
-    type KeyPairSigner,
     pipe,
     type ReadonlyUint8Array,
     setTransactionMessageFeePayer,
     setTransactionMessageLifetimeUsingBlockhash,
-    type SignatureBytes,
-    signBytes,
 } from '@solana/kit';
-
-/**
- * The address that acts for `authority`: a PDA of the Signer program.
- *
- * Nothing is created on chain. It is a plain System-owned address that holds
- * SOL and owns token accounts like any wallet, and the Signer program promotes
- * it to a signer whenever `authority` has signed an authorization for it.
- */
-export async function programmaticSignerAddress(authority: Address): Promise<Address> {
-    const [address] = await findProgrammaticSignerPda({ authority });
-    return address;
-}
 
 /**
  * A lifetime slot holding `value` instead of a blockhash. The execution
@@ -116,46 +100,4 @@ export function authorizationMessage(
         m => appendTransactionMessageInstruction(demoted, m),
     );
     return getCompiledTransactionMessageEncoder().encode(compileTransactionMessage(message));
-}
-
-/**
- * Signs the authorization message with a cold key.
- *
- * This is the only thing the cold key ever signs. It needs no RPC, no
- * blockhash, and no SOL.
- */
-export async function signAuthorization(
-    authorizationMessage: ReadonlyUint8Array,
-    authority: KeyPairSigner,
-): Promise<SignatureBytes> {
-    return await signBytes(authority.keyPair.privateKey, authorizationMessage);
-}
-
-/**
- * What crosses from the cold side to the hot side: everything the relayer
- * needs and nothing it can alter without invalidating the signature.
- */
-export type Artifact = {
-    /** The authorization message, base64, exactly as signed. */
-    authorizationMessage: string;
-    /** One signature per authority, as `address=signature` pairs. */
-    signatures: string[];
-    /** The nonce value the action consumes. */
-    consumedNonce: Address;
-    /** The nonce value the account will hold afterwards. */
-    nextNonce: Address;
-};
-
-export function artifact(
-    authorizationMessage: ReadonlyUint8Array,
-    signatures: [Address, SignatureBytes][],
-    consumedNonce: Address,
-    nextNonce: Address,
-): Artifact {
-    return {
-        authorizationMessage: getBase64Decoder().decode(authorizationMessage),
-        consumedNonce,
-        nextNonce,
-        signatures: signatures.map(([address, signature]) => `${address}=${getBase58Decoder().decode(signature)}`),
-    };
 }

@@ -41,9 +41,19 @@ The TypeScript examples use the released [`@solana-program/ed25519-programmatic-
 
 Source: [`rust/src/bin/`](rust/src/bin) and [`ts/kit/src/`](ts/kit/src).
 
-The five operations in the directory README map onto the shared modules in [`rust/src/`](rust/src) and [`ts/kit/src/lib/`](ts/kit/src/lib): derive the PDA with `signer::programmatic_signer_address`; create a nonce account with `spl_nonce::create_nonce_account`; on the cold side build and sign with `signer::execution_message`, `signer::authorization_message`, and `signer::sign_authorization`, predicting the successor with `spl_nonce::next_nonce`; on the hot side relay with `signer::relay_transaction` in Rust, and in TypeScript by sending the `submit` instruction of the client's `ed25519Signer` plugin. Moving the funds is an ordinary transfer, done in each example's setup.
+The five operations in the directory README are mostly calls into the official clients; the shared modules in [`rust/src/`](rust/src) and [`ts/kit/src/lib/`](ts/kit/src/lib) hold only what those clients lack.
 
-`sign-relay` sends the same transfer twice: first as a durable nonce transaction, then through the programmatic signer, printing each layer as it goes. Between signing and relaying it waits for a blockhash captured at signing time to expire, about a minute on a local validator, which is the shortest proof that the artifact outlives one. Set `PSIGNER_SKIP_EXPIRY=true` to skip the wait.
+| Operation | Rust | TypeScript |
+|---|---|---|
+| Derive the PDA | `ProgrammaticSigner::derive_address` | `findProgrammaticSignerPda` |
+| Move the funds | an ordinary transfer | an ordinary transfer |
+| Create a nonce account | `spl_nonce::create_nonce_account` | `createNonceAccount` in `spl-nonce.ts` |
+| Build the action's message | `signer::execution_message` | `executionMessage` in `signer.ts` |
+| Sign on the cold side | `execute`, then `sign_and_submit` | `authorizationMessage` in `signer.ts`, then `signBytes` |
+| Predict the next nonce | `spl_nonce::next_nonce` | `nextNonce` in `spl-nonce.ts` |
+| Relay on the hot side | send the `Submit` instruction | `client.ed25519Signer.instructions.submit(...)` |
+
+`sign-relay` sends the same transfer twice: first as a durable nonce transaction, then through the programmatic signer, printing each layer as it goes. Between signing and relaying it waits for a blockhash captured at signing time to expire, about a minute on a local validator, which is the shortest proof that the signed authorization outlives one. Set `PSIGNER_SKIP_EXPIRY=true` to skip the wait.
 
 `token-transfer` is the withdrawal most nonce users run: tokens, not SOL. The PDA holds 1,000 of a Token program mint, the kind USDC is. The cold key signs one action that creates the recipient's token account, with the PDA paying the rent, and moves 250 into it; the hot key relays it. It costs about 90,000 compute units against roughly 54,000 for a SOL transfer, most of it the account creation. It does not wait for a blockhash to expire; `sign-relay` already shows that.
 
@@ -64,16 +74,7 @@ Every account key appears once per layer, which is where most of the 979 bytes g
 
 ## What crosses the air gap
 
-The cold side needs the nonce value and nothing else from the network. It produces one JSON object:
-
-```json
-{
-  "authorization_message": "gQEAAwAAAAAAAAAAAAAAAAAA…",
-  "signatures": ["GmaDrpp…=3JTm3k6…"],
-  "consumed_nonce": "8KP1FT4ScGWBmvCpzaHd3QGGaWfewyrPpvQDTf8Vq4uF",
-  "next_nonce": "7BzzPoqR58w3EYmPn1UTsAdHNy9QkFRkztb8qg5LjZW5"
-}
-```
+The cold side needs the nonce value and nothing else from the network. What it hands the relayer is the authorization message and one signature per authority. In Rust, `sign_and_submit` returns the two already packed into the `Submit` instruction; in TypeScript they are the bytes `authorizationMessage` built and the signature `signBytes` produced. Neither client defines a file format for the handoff, so serialize them however your air gap requires.
 
 The relayer cannot change the amount, the recipient, or the nonce without invalidating the signature. It can choose when to relay, with which blockhash, from which fee payer, and with what compute budget.
 
@@ -81,7 +82,7 @@ The relayer cannot change the amount, the recipient, or the nonce without invali
 
 ## Common gotchas
 
-**Two different errors are both `custom program error: 0x3`.** The Executor's `NonceMismatch` and the Signer's `InvalidSignature` share the number. A replayed artifact fails with the first, an edited one with the second. Read which program failed in the log to tell them apart; the live tests check both.
+**Two different errors are both `custom program error: 0x3`.** The Executor's `NonceMismatch` and the Signer's `InvalidSignature` share the number. A replayed authorization fails with the first, an edited one with the second. Read which program failed in the log to tell them apart; the live tests check both.
 
 **The execution message must carry no transaction config.** The Executor rejects one that sets a compute unit limit or a priority fee, since those only mean something on a top-level transaction. Set the budget on the relay transaction instead. The Anza CLI strips a config it is handed; these examples never set one.
 
@@ -130,7 +131,7 @@ Rust flags: `--rpc-url`, `--skip-expiry`.
 ## Testing
 
 ```sh
-just test       # offline: PDA derivation, message layouts, nonce prediction, signature coverage, token withdrawal
+just test       # offline: execution message, authorization message, nonce prediction, token withdrawal
 just test-live  # everything, against a validator started for the run
 just check      # what CI runs on every PR, minus the live tests
 ```
@@ -149,7 +150,7 @@ ts/kit/test/          offline and live tests
 scripts/              validator and program build
 ```
 
-Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects with a funded key and checks the programs are deployed; `spl_nonce` (`spl-nonce` in TypeScript) creates and reads SPL nonce accounts and predicts the next value; `signer` builds and signs the layers, and in Rust the relay transaction, which the TypeScript client's `ed25519Signer` plugin sends; `token` creates a mint and token accounts, reads balances, and in Rust builds the PDA's withdrawal, which TypeScript takes straight from `@solana-program/token`; `durable_nonce` (`durable-nonce`) is the durable nonce flow for comparison.
+Runnable examples are separate from the code they share. A file directly under `src/bin/` or `src/` is an entry point: it runs top to bottom and has a `just` recipe. The library modules mirror each other: `cluster` connects with a funded key and checks the programs are deployed; `spl_nonce` (`spl-nonce` in TypeScript) creates SPL nonce accounts and predicts the next value; `signer` builds the execution message, and in TypeScript the authorization message; `token` holds the token helpers the examples need, which in Rust includes the mint setup and the PDA's withdrawal; `durable_nonce` (`durable-nonce`) is the durable nonce flow for comparison.
 
 ## Additional resources
 

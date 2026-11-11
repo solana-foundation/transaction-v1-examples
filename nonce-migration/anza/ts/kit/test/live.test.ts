@@ -7,13 +7,16 @@
 
 import {
     ED25519_SIGNER_ERROR__INVALID_SIGNATURE,
+    findProgrammaticSignerPda,
     MESSAGE_EXECUTOR_ERROR__NONCE_MISMATCH,
 } from '@solana-program/ed25519-programmatic-signer';
 import {
+    type Address,
     generateKeyPairSigner,
     isSolanaError,
     lamports,
     type ReadonlyUint8Array,
+    signBytes,
     type SignatureBytes,
     SOLANA_ERROR__FAILED_TO_SEND_TRANSACTION,
     SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
@@ -22,14 +25,9 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { assertProgramsDeployed, createFundedClient } from '../src/lib/cluster';
-import {
-    authorizationMessage,
-    executionMessage,
-    programmaticSignerAddress,
-    signAuthorization,
-} from '../src/lib/signer';
+import { authorizationMessage, executionMessage } from '../src/lib/signer';
 import { createNonceAccount, nextNonce } from '../src/lib/spl-nonce';
-import { associatedTokenAddress, createMint, fetchBalance, mintToAta } from '../src/lib/token';
+import { associatedTokenAddress, DECIMALS } from '../src/lib/token';
 import { solTransfer, tokenTransfer } from './fixtures';
 
 const live = process.env.PSIGNER_LIVE === '1';
@@ -41,7 +39,7 @@ const live = process.env.PSIGNER_LIVE === '1';
 async function setup() {
     const relayer = await createFundedClient(5_000_000_000n);
     const authority = await generateKeyPairSigner();
-    const pda = await programmaticSignerAddress(authority.address);
+    const [pda] = await findProgrammaticSignerPda({ authority: authority.address });
     await relayer.system.instructions
         .transferSol({ amount: lamports(100_000_000n), destination: pda, source: relayer.payer })
         .sendTransaction();
@@ -88,7 +86,7 @@ describe.skipIf(!live)('sign-relay', () => {
 
         const execution = executionMessage(pda, solTransfer(pda, recipient, 1_000_000n), nonce);
         const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
-        const signature = await signAuthorization(authorization, authority);
+        const signature = await signBytes(authority.keyPair.privateKey, authorization);
         const predicted = await nextNonce(nonceAccount, nonce, execution);
 
         await relay(authorization, signature);
@@ -105,9 +103,9 @@ describe.skipIf(!live)('sign-relay', () => {
 
         // Sign one amount, relay another.
         const signed = executionMessage(pda, solTransfer(pda, recipient, 1_000_000n), await nonce());
-        const signature = await signAuthorization(
+        const signature = await signBytes(
+            authority.keyPair.privateKey,
             authorizationMessage(signed, nonceAccount, pda, authority.address),
-            authority,
         );
         const edited = executionMessage(pda, solTransfer(pda, recipient, 2_000_000n), await nonce());
         const authorization = authorizationMessage(edited, nonceAccount, pda, authority.address);
@@ -120,18 +118,26 @@ describe.skipIf(!live)('token-transfer', () => {
     it('a cold-signed token withdrawal creates the destination and lands', async () => {
         const { authority, nonce, nonceAccount, pda, relay, relayer } = await setup();
         const recipient = (await generateKeyPairSigner()).address;
-        const mint = await createMint(relayer);
-        const pdaAccount = await mintToAta(relayer, mint, pda, 1_000_000_000n);
+        const newMint = await generateKeyPairSigner();
+        const mint = newMint.address;
+        await relayer.token.instructions
+            .createMint({ decimals: DECIMALS, mintAuthority: relayer.payer.address, newMint })
+            .sendTransactions();
+        await relayer.token.instructions
+            .mintToATA({ amount: 1_000_000_000n, decimals: DECIMALS, mint, mintAuthority: relayer.payer, owner: pda })
+            .sendTransactions();
+        const balance = async (owner: Address) =>
+            (await relayer.token.accounts.token.fetch(await associatedTokenAddress(owner, mint))).data.amount;
         const initial = await nonce();
 
         const execution = executionMessage(pda, await tokenTransfer(mint, pda, recipient, 250_000_000n), initial);
         const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
-        const signature = await signAuthorization(authorization, authority);
+        const signature = await signBytes(authority.keyPair.privateKey, authorization);
         const predicted = await nextNonce(nonceAccount, initial, execution);
 
         await relay(authorization, signature);
-        expect(await fetchBalance(relayer, await associatedTokenAddress(recipient, mint))).toBe(250_000_000n);
-        expect(await fetchBalance(relayer, pdaAccount)).toBe(750_000_000n);
+        expect(await balance(recipient)).toBe(250_000_000n);
+        expect(await balance(pda)).toBe(750_000_000n);
         expect(await nonce()).toBe(predicted);
         await expectCustomError(relay(authorization, signature), MESSAGE_EXECUTOR_ERROR__NONCE_MISMATCH);
     });

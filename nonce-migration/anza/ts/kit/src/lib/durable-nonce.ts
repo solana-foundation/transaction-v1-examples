@@ -14,17 +14,14 @@ import {
     assertIsTransactionWithDurableNonceLifetime,
     createTransactionMessage,
     generateKeyPairSigner,
-    getSignatureFromTransaction,
     type KeyPairSigner,
     lamports,
     type Nonce,
     pipe,
-    sendAndConfirmDurableNonceTransactionFactory,
     type SendableTransaction,
     setTransactionMessageConfig,
     setTransactionMessageFeePayerSigner,
     setTransactionMessageLifetimeUsingDurableNonce,
-    type Signature,
     signTransactionMessageWithSigners,
     type Transaction,
     type TransactionWithDurableNonceLifetime,
@@ -51,12 +48,6 @@ export async function createDurableNonceAccount(client: Client): Promise<Address
     return nonceAccount.address;
 }
 
-/** Reads the value a System nonce account currently holds. */
-export async function fetchDurableNonce(client: Client, nonceAccount: Address): Promise<Nonce> {
-    const { data } = await client.system.accounts.nonce.fetch(nonceAccount);
-    return data.blockhash as string as Nonce;
-}
-
 /**
  * The budget of the durable nonce transfer: two System instructions cost 300
  * compute units, and the cold key is offline and cannot simulate.
@@ -70,7 +61,8 @@ const DURABLE_NONCE_CONFIG: V1TransactionConfig = {
 export type DurableNonceTransaction = SendableTransaction & Transaction & TransactionWithDurableNonceLifetime;
 
 /**
- * Signs a durable nonce transfer from `cold`. Nothing is sent.
+ * Signs a durable nonce transfer from `cold`, using the value its System
+ * nonce account holds, as the account decoder returns it. Nothing is sent.
  *
  * The message is v1, and a durable nonce works on it as it does on a legacy
  * one: the nonce sits in the blockhash slot and `AdvanceNonceAccount` comes
@@ -79,7 +71,7 @@ export type DurableNonceTransaction = SendableTransaction & Transaction & Transa
 export async function signDurableNonceTransfer(
     cold: KeyPairSigner,
     nonceAccount: Address,
-    nonce: Nonce,
+    nonce: Address,
     recipient: Address,
     amount: bigint,
 ): Promise<DurableNonceTransaction> {
@@ -88,7 +80,11 @@ export async function signDurableNonceTransfer(
         m => setTransactionMessageFeePayerSigner(cold, m),
         m =>
             setTransactionMessageLifetimeUsingDurableNonce(
-                { nonce, nonceAccountAddress: nonceAccount, nonceAuthorityAddress: cold.address },
+                {
+                    nonce: nonce as string as Nonce,
+                    nonceAccountAddress: nonceAccount,
+                    nonceAuthorityAddress: cold.address,
+                },
                 m,
             ),
         m =>
@@ -101,13 +97,4 @@ export async function signDurableNonceTransfer(
     const transaction = await signTransactionMessageWithSigners(message);
     assertIsTransactionWithDurableNonceLifetime(transaction);
     return transaction;
-}
-
-/** Sends a durable nonce transaction and waits for it to confirm. */
-export async function sendDurableNonceTransaction(
-    client: Client,
-    transaction: DurableNonceTransaction,
-): Promise<Signature> {
-    await sendAndConfirmDurableNonceTransactionFactory(client)(transaction, { commitment: 'confirmed' });
-    return getSignatureFromTransaction(transaction);
 }

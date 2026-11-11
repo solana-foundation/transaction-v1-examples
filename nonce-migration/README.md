@@ -39,7 +39,7 @@ Moving a cold-key workflow onto the replacement is five operations. Each backend
 1. **Derive the PDA from the cold key.** Nothing to create or initialize; it is a plain System address.
 2. **Move the funds to it.** An ordinary transfer of SOL, and of each token balance to the PDA's associated token account.
 3. **Create nonce accounts with the PDA as authority,** one per action you want in flight; anyone can pay.
-4. **On the cold side, sign authorization messages.** Read the nonce value, build the action as the PDA would send it, wrap it, sign it, and hand the JSON artifact across the air gap. The next nonce value is known now, so several actions can be signed in sequence.
+4. **On the cold side, sign authorization messages.** Read the nonce value, build the action as the PDA would send it, wrap it, sign it, and hand the signed authorization across the air gap. The next nonce value is known now, so several actions can be signed in sequence.
 5. **On the hot side, relay.** Any funded key wraps the artifact in a transaction with a fresh blockhash and sends it.
 
 Afterwards, old System nonce accounts can be closed with `WithdrawNonceAccount` to reclaim their rent.

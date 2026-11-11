@@ -12,11 +12,18 @@
  * Run with `just ts-sign-relay`.
  */
 
-import { MESSAGE_EXECUTOR_ERROR__NONCE_MISMATCH } from '@solana-program/ed25519-programmatic-signer';
+import {
+    findProgrammaticSignerPda,
+    MESSAGE_EXECUTOR_ERROR__NONCE_MISMATCH,
+} from '@solana-program/ed25519-programmatic-signer';
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
     createNoopSigner,
     generateKeyPairSigner,
+    getBase58Decoder,
+    getSignatureFromTransaction,
+    sendAndConfirmDurableNonceTransactionFactory,
+    signBytes,
     getCompiledTransactionMessageDecoder,
     getTransactionSize,
     isSolanaError,
@@ -28,19 +35,8 @@ import {
 } from '@solana/kit';
 
 import { assertProgramsDeployed, createFundedClient, json, waitForBlockhashExpiry } from './lib/cluster';
-import {
-    createDurableNonceAccount,
-    fetchDurableNonce,
-    sendDurableNonceTransaction,
-    signDurableNonceTransfer,
-} from './lib/durable-nonce';
-import {
-    artifact,
-    authorizationMessage,
-    executionMessage,
-    programmaticSignerAddress,
-    signAuthorization,
-} from './lib/signer';
+import { createDurableNonceAccount, signDurableNonceTransfer } from './lib/durable-nonce';
+import { authorizationMessage, executionMessage } from './lib/signer';
 import { createNonceAccount, nextNonce } from './lib/spl-nonce';
 
 const AMOUNT = 10_000_000n;
@@ -55,22 +51,23 @@ console.log('== before: a System durable nonce transaction ==');
 const coldClient = await createFundedClient(1_000_000_000n);
 const cold = coldClient.payer;
 const durableNonceAccount = await createDurableNonceAccount(coldClient);
-const durableNonce = await fetchDurableNonce(coldClient, durableNonceAccount);
+const fetchDurableNonce = async () =>
+    (await coldClient.system.accounts.nonce.fetch(durableNonceAccount)).data.blockhash;
+const durableNonce = await fetchDurableNonce();
 const durable = await signDurableNonceTransfer(cold, durableNonceAccount, durableNonce, recipient, AMOUNT);
 console.log(`  nonce account: ${durableNonceAccount}`);
 console.log(`  nonce:         ${durableNonce}`);
 console.log(`  signed by:     ${json(Object.keys(durable.signatures))} (the cold key, which also pays)`);
 console.log(`  size:          ${getTransactionSize(durable)} bytes`);
-console.log(`  landed:        ${await sendDurableNonceTransaction(coldClient, durable)}`);
-console.log(
-    `  nonce after:   ${await fetchDurableNonce(coldClient, durableNonceAccount)} (a future blockhash; not knowable at signing time)`,
-);
+await sendAndConfirmDurableNonceTransactionFactory(coldClient)(durable, { commitment: 'confirmed' });
+console.log(`  landed:        ${getSignatureFromTransaction(durable)}`);
+console.log(`  nonce after:   ${await fetchDurableNonce()} (a future blockhash; not knowable at signing time)`);
 
 // The replacement. The cold key is never funded and never signs a transaction.
 // A PDA derived from it holds the funds instead.
 console.log('\n== after: a programmatic signer authorization ==');
 const authority = await generateKeyPairSigner();
-const pda = await programmaticSignerAddress(authority.address);
+const [pda] = await findProgrammaticSignerPda({ authority: authority.address });
 console.log(`  authority: ${authority.address} (cold; holds nothing, signs one message)`);
 console.log(`  pda:       ${pda} (holds the funds; nothing to create)`);
 
@@ -96,9 +93,8 @@ console.log('\n== signed on the cold side ==');
 const transfer = getTransferSolInstruction({ amount: AMOUNT, destination: recipient, source: createNoopSigner(pda) });
 const execution = executionMessage(pda, singleInstructionPlan(transfer), nonce);
 const authorization = authorizationMessage(execution, nonceAccount, pda, authority.address);
-const signature = await signAuthorization(authorization, authority);
+const signature = await signBytes(authority.keyPair.privateKey, authorization);
 const predicted = await nextNonce(nonceAccount, nonce, execution);
-const signed = artifact(authorization, [[authority.address, signature]], nonce, predicted);
 const decodedAuthorization = getCompiledTransactionMessageDecoder().decode(authorization);
 if (decodedAuthorization.version !== 1) {
     throw new Error('the authorization message must be v1');
@@ -108,7 +104,8 @@ console.log(`  authorization message: ${authorization.length} bytes, 1 instructi
 console.log(
     `  signers:               ${json(decodedAuthorization.staticAccounts.slice(0, decodedAuthorization.header.numSignerAccounts))}`,
 );
-console.log(`  artifact:              ${json(signed, 2).replace(/\n/g, '\n                         ')}`);
+console.log(`  signature:             ${getBase58Decoder().decode(signature)}`);
+console.log(`  next nonce:            ${predicted} (known before anything is sent)`);
 
 // A transaction signed now would die with this blockhash. The artifact has no
 // blockhash, so it does not.
