@@ -1,0 +1,18 @@
+{
+    "name": "psigner-examples-kit",
+    "version": "0.1.0",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@solana-program/ed25519-programmatic-signer": "^1.0.0",
+        "@solana-program/system": "^0.15.0",
+        "@solana-program/token": "^0.18.0",
+        "@solana/kit": "^8.6.0",
+        "@solana/kit-plugin-rpc": "^0.23.0",
+        "@solana/kit-plugin-signer": "^0.23.0"
+    }
+}

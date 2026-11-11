@@ -1,0 +1,54 @@
+[package]
+name = "psigner"
+edition = "2021"
+license = "MIT"
+publish = false
+version = "0.1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+
+[dependencies]
+anyhow = "1"
+
+# The client crates are not published: on crates.io they are 0.1.0 placeholders,
+# and only spl-nonce-interface has a release. Every crate is pinned to one commit
+# of the repo, the clients-js@v1.0.0 tag, the same one scripts/setup-programs.sh
+# builds the programs from, so the wire formats on both sides of the RPC cannot
+# drift apart.
+spl-ed25519-signer-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-message-executor-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-message-executor-interface = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-nonce-client = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+spl-nonce-interface = { git = "https://github.com/solana-program/ed25519-programmatic-signer", rev = "cf46a93238154cc681169f096c4dffd6188f1491" }
+
+# The token crates the pinned Anza CLI builds `migrate token` with, at the
+# versions its workspace pins.
+spl-associated-token-account-interface = "2.0.0"
+spl-token-interface = "3.0.0"
+
+# The versions the pinned Anza workspace builds against, so one `Address` and
+# one `v1::Message` type flow through the client crates and this package.
+solana-address = { version = "~2.6.1", features = ["atomic", "copy", "decode"] }
+solana-commitment-config = "3.1.1"
+solana-hash = "4.4.0"
+solana-instruction = "3.4.1"
+solana-keypair = "3.1.2"
+solana-message = { version = "4.4.1", features = ["wincode"] }
+solana-nonce = "3.2.0"
+solana-program-pack = "3.0.0"
+solana-rpc-client = "4.2.1"
+solana-rpc-client-api = "4.2.1"
+solana-rpc-client-nonce-utils = "4.2.1"
+solana-sdk-ids = "3.1.0"
+solana-signature = "3.4.1"
+solana-signer = "3.0.1"
+solana-system-interface = { version = "3.2.0", features = ["bincode"] }
+solana-transaction = { version = "4.1.6", features = ["wincode"] }
+solana-transaction-status-client-types = "4.2.1"
+
+[dev-dependencies]
+base64 = "0.22"

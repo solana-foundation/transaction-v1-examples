@@ -1,0 +1,94 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+solana_version := "4.4.1"
+# solana-program/ed25519-programmatic-signer at the clients-js@v1.0.0 tag: the
+# commit the Rust client crates and the programs the validator loads come from,
+# and the one the npm package the TypeScript examples depend on was built from.
+psigner_commit := "cf46a93238154cc681169f096c4dffd6188f1491"
+
+export PSIGNER_COMMIT := psigner_commit
+
+_default:
+    @just --list
+
+# Setup
+
+# Install Rust and TypeScript dependencies.
+setup:
+    cd rust && cargo fetch --locked
+    cd ts && pnpm install
+
+# Install the Anza CLI this directory is pinned to.
+setup-solana:
+    sh -c "$(curl -sSfL https://release.anza.xyz/v{{ solana_version }}/install)"
+    solana --version
+
+# Build the three programs from the pinned commit into .local/programs/.
+setup-programs:
+    ./scripts/setup-programs.sh
+
+# Formatting
+
+fmt:
+    cd rust && cargo fmt --all
+    cd ts && pnpm exec oxfmt .
+
+fmt-check:
+    cd rust && cargo fmt --all --check
+    cd ts && pnpm exec oxfmt --check .
+
+# Linting
+
+lint:
+    cd rust && cargo clippy --locked --all-targets -- -D warnings
+    cd ts && pnpm exec oxlint
+
+typecheck:
+    cd ts && pnpm exec tsc -p kit/tsconfig.json --noEmit
+
+# Testing
+
+# The tests are offline — no validator required.
+test:
+    cd rust && cargo test --locked
+    cd ts/kit && pnpm exec vitest run
+
+# Everything CI runs, minus the examples, which need a validator.
+check: fmt-check lint typecheck test
+
+# Local validator
+
+# Start a validator with the Signer, Executor, and Nonce programs loaded.
+validator-start:
+    ./scripts/validator.sh start
+
+validator-stop:
+    ./scripts/validator.sh stop
+
+# Examples (require a running validator: `just validator-start`)
+
+# Sign a SOL transfer with a cold key, relay it after the signing-time blockhash expires, and reject a replay.
+sign-relay:
+    cd rust && cargo run --bin sign-relay
+
+ts-sign-relay:
+    cd ts/kit && pnpm exec tsx src/sign-relay.ts
+
+# Sign a token withdrawal with a cold key, creating the recipient's token account on the way, and relay it from a hot key.
+token-transfer:
+    cd rust && cargo run --bin token-transfer
+
+ts-token-transfer:
+    cd ts/kit && pnpm exec tsx src/token-transfer.ts
+
+# Run every example end to end against a fresh validator.
+demo:
+    just validator-start
+    just _demo-inner || (just validator-stop && exit 1)
+    just validator-stop
+
+_demo-inner:
+    just sign-relay
+    just ts-sign-relay
+    just token-transfer
+    just ts-token-transfer
